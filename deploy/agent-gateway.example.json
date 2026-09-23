@@ -1,0 +1,20 @@
+{
+  "servers": [
+    {
+      "scope": {"organization_id": "example_org", "repository_id": "example_repo"},
+      "server_id": "review_tools",
+      "endpoint": "https://mcp.example.invalid/mcp",
+      "pinned_ips": ["192.0.2.10"],
+      "token_env": ""
+    }
+  ],
+  "policies": [
+    {
+      "scope": {"organization_id": "example_org", "repository_id": "example_repo"},
+      "revision": 1,
+      "lease_seconds": 60,
+      "call_budget": 2,
+      "rules": []
+    }
+  ]
+}

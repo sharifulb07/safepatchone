@@ -1,0 +1,1782 @@
+openapi: 3.1.0
+info:
+  title: SafePatch API
+  version: 0.2.0
+  description: Shared API contract for all five commercial editions. Public catalog, organization onboarding and billing integration. Onboarding mutations require an authenticated cookie, an exact trusted Origin and the session-bound X-CSRF-Token. No browser-supplied subscription status is accepted.
+paths:
+  /v1/downloads/public:
+    get:
+      operationId: listPublicDownloads
+      summary: List unexpired stable public release assets and the shared CLI
+      security: []
+      responses:
+        '200':
+          description: Public metadata only; never contains protected entries, object versions or storage URLs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 4096, items: {$ref: '#/components/schemas/PublicDownload'}}
+  /v1/downloads/public/{artifact}:
+    get:
+      operationId: publicDownloadLink
+      summary: Obtain a short-lived URL for an explicitly public stable artifact
+      security: []
+      parameters:
+        - {in: path, name: artifact, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
+      responses:
+        '200': {description: No-store signed link, content: {application/json: {schema: {$ref: '#/components/schemas/DownloadLink'}}}}
+        '400': {description: Invalid path, query or body}
+        '404': {description: Unknown, expired or protected artifact}
+        '429': {description: URL issuance capacity exhausted}
+        '503': {description: Signing unavailable}
+  /v1/organizations/{organization}/downloads/{artifact}:
+    post:
+      operationId: protectedDownloadLink
+      summary: Authorize a protected release artifact and issue a short-lived signed URL
+      description: >-
+        Uses the existing opaque session bearer; cookies and provider tokens are
+        not accepted. Resolves current organization membership, then all required
+        capabilities, organization.manage and optional artifact organization binding.
+        Self-host bundles require enterprise.self_hosted. Air-gap bundles additionally
+        require enterprise.airgap. Every lts artifact additionally requires enterprise.lts.
+        All checks precede signing. No request body or query parameters are accepted.
+        URLs expire within 60 seconds, possibly earlier with credential/artifact expiry.
+        Responses are private/no-store; issued bearer URLs remain usable until expiry.
+      security:
+        - agentBearer: []
+      parameters:
+        - {in: path, name: organization, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
+        - {in: path, name: artifact, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
+      responses:
+        '200': {description: Authorized no-store link, content: {application/json: {schema: {$ref: '#/components/schemas/DownloadLink'}}}}
+        '400': {description: Invalid path, query or nonempty body}
+        '401': {description: Missing, ambiguous or invalid authentication}
+        '403': {description: Tenant, capability, artifact authorization, quota or availability denied}
+        '429': {description: URL issuance capacity exhausted}
+        '503': {description: Signing unavailable}
+  /v1/organizations/{organization}/repositories/{repository}/agent/{operation}:
+    post:
+      operationId: agentGatewayOperation
+      summary: Inventory, compile, issue a SafeLease, invoke an MCP tool, or revoke
+      description: >-
+        Shared gateway for every edition, enabled by trusted server configuration.
+        Inventory and compile require agent.mcp_inventory and agent.manage.
+        Lease issuance and invocation additionally require agent.mcp_gateway,
+        agent.safelease and agent.temporalguard. Revoke requires current tenant
+        ownership and agent.manage even after a downgrade. Actor identity comes
+        from an explicitly supplied existing session bearer, never cookies or
+        body claims. An invocation is durably consumed before dispatch and is
+        never replayed after an ambiguous failure. RETURNED is untrusted tool
+        output, never PASS or production approval. Request body limit is 128 KiB.
+      security:
+        - agentBearer: []
+      parameters:
+        - {in: path, name: organization, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
+        - {in: path, name: repository, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
+        - in: path
+          name: operation
+          required: true
+          schema: {type: string, enum: [inventory, compile, leases, invoke, revoke]}
+      requestBody:
+        required: true
+        description: inventory uses an empty object; compile/leases use AgentCompileRequest; invoke uses AgentInvokeRequest; revoke uses AgentRevokeRequest. Unknown, duplicate and aliased fields fail.
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - {type: object, additionalProperties: false, maxProperties: 0}
+                - {$ref: '#/components/schemas/AgentCompileRequest'}
+                - {$ref: '#/components/schemas/AgentInvokeRequest'}
+                - {$ref: '#/components/schemas/AgentRevokeRequest'}
+      responses:
+        '200':
+          description: Inventory, compiled capabilities, issued lease, invocation receipt/output, or revocation acknowledgement according to operation.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/AgentInventory'}
+                  - {$ref: '#/components/schemas/AgentCapabilities'}
+                  - {$ref: '#/components/schemas/AgentLease'}
+                  - {$ref: '#/components/schemas/AgentResult'}
+                  - {type: object, additionalProperties: false, required: [revoked], properties: {revoked: {type: boolean, const: true}}}
+        '400': {description: Invalid or ambiguous input}
+        '401': {description: Missing or invalid bearer session}
+        '403': {description: Tenant, entitlement, permission, temporal, policy, budget or replay denial}
+        '404': {description: Unknown operation}
+        '413': {description: Request body exceeds the bound}
+        '429': {description: Gateway concurrency limit reached}
+        '503': {description: Dependency error or ambiguous invocation; never retry a consumed invocation as a new call without reconciliation}
+  /v1/integrations/github/webhook:
+    post:
+      operationId: receiveGitHubPullRequest
+      summary: Verify and durably admit an organization-scoped PR workflow
+      description: Verifies HMAC-SHA256 over the exact body before parsing. Installation and repository IDs resolve a trusted organization automation binding; sender names and roles grant no authority. Accepted work uses the shared change workflow and pinned policy hash. Duplicate deliveries are idempotent; mismatched delivery identity is rejected. Returning 202 means durable admission, never PASS.
+      security: []
+      parameters:
+        - in: header
+          name: X-Hub-Signature-256
+          required: true
+          schema: {type: string, pattern: '^sha256=[a-fA-F0-9]{64}$'}
+        - in: header
+          name: X-GitHub-Delivery
+          required: true
+          schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+        - in: header
+          name: X-GitHub-Event
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        description: Exact GitHub payload, at most 1048576 bytes. Never normalize before signature validation. Duplicate JSON keys are rejected after verification.
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '202': {description: PR job and delivery receipt committed atomically}
+        '204': {description: Validly signed unsupported event or action ignored}
+        '400': {description: Invalid signature, payload, commit pins or delivery identity}
+        '403': {description: Entitlement or independent automation permission denied}
+        '405': {description: POST required}
+        '413': {description: Body exceeds ingress bound}
+        '503': {description: Binding, storage or admission unavailable; retry safely}
+  /v1/auth/github/start:
+    get:
+      operationId: startGitHubLogin
+      summary: Start signup or login with browser-bound state and PKCE
+      responses:
+        '303':
+          description: GitHub authorization redirect with Secure HttpOnly OAuth correlation cookie
+        '503':
+          description: Identity service unavailable
+  /v1/auth/github/callback:
+    get:
+      operationId: finishGitHubLogin
+      summary: Consume one-use state and exchange the authorization code server-side
+      parameters:
+        - in: query
+          name: state
+          required: true
+          schema: {type: string, minLength: 43, maxLength: 43}
+        - in: query
+          name: code
+          required: true
+          schema: {type: string, maxLength: 1024}
+      responses:
+        '303':
+          description: Fixed onboarding redirect with new Secure session and CSRF cookies; no entitlement changes
+        '400':
+          description: Invalid or replayed login attempt
+        '503':
+          description: Identity service unavailable
+  /v1/onboarding/session:
+    get:
+      operationId: readOnboardingSession
+      security: [{sessionCookie: []}]
+      responses:
+        '200':
+          description: Current user and current organization memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, organizations, github_install_url]
+                properties:
+                  user_id: {type: string}
+                  github_install_url: {type: string, format: uri}
+                  organizations:
+                    type: array
+                    items:
+                      type: object
+                      required: [organization_id, name]
+                      properties:
+                        organization_id: {type: string}
+                        name: {type: string}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/logout:
+    post:
+      operationId: logoutOnboardingSession
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      responses:
+        '200': {description: Session revoked and cookies expired}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/installations:
+    get:
+      operationId: listOnboardingGitHubInstallations
+      security: [{sessionCookie: []}]
+      responses:
+        '200':
+          description: Installations accessible to the authenticated GitHub user, bounded to 1000
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items:
+                  type: object
+                  required: [id, name]
+                  properties:
+                    id: {type: integer, minimum: 1}
+                    name: {type: string}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/organizations:
+    post:
+      operationId: createOnboardingOrganization
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [attempt, name]
+              properties:
+                attempt: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+                name: {type: string, minLength: 1, maxLength: 256}
+      responses:
+        '201': {$ref: '#/components/responses/OnboardingState'}
+        '400': {$ref: '#/components/responses/OnboardingError'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/{organization_id}:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      operationId: readOnboarding
+      security: [{sessionCookie: []}]
+      responses:
+        '200':
+          description: Saved intent plus independently resolved authoritative access and eligible policies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, access, policies]
+                properties:
+                  state: {$ref: '#/components/schemas/OnboardingState'}
+                  access:
+                    type: object
+                    required: [ready, source]
+                    properties:
+                      ready: {type: boolean}
+                      source: {type: string}
+                      expires_at: {type: string, format: date-time}
+                  policies:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, description]
+                      properties:
+                        id: {type: string}
+                        name: {type: string}
+                        description: {type: string}
+                  proof: {$ref: '#/components/schemas/FirstProof'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/{organization_id}/edition:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      operationId: selectOnboardingEdition
+      description: Requires billing.manage. Saves intent with compare-and-swap revision; never writes a subscription or entitlement.
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      requestBody: {$ref: '#/components/requestBodies/OnboardingMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/OnboardingState'}
+        '400': {$ref: '#/components/responses/OnboardingError'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/{organization_id}/billing:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      operationId: startOnboardingBilling
+      description: Requires billing.manage and mode. Uses trusted server offer configuration and the existing trial or checkout service. Clients must reload onboarding access; a redirect URL does not establish access.
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      requestBody: {$ref: '#/components/requestBodies/OnboardingMutation'}
+      responses:
+        '200':
+          description: Checkout URL or empty URL for committed trial; no client grant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [redirect_url]
+                properties:
+                  redirect_url: {type: string}
+        '400': {$ref: '#/components/responses/OnboardingError'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/{organization_id}/repositories:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    get:
+      operationId: listOnboardingRepositories
+      security: [{sessionCookie: []}]
+      parameters:
+        - in: query
+          name: installation_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Current GitHub access, filtered through organization capabilities
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items: {$ref: '#/components/schemas/OnboardingRepository'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+    post:
+      operationId: selectOnboardingRepositories
+      description: Requires organization.manage, confirmed access, installation_id and repository_ids. Server revalidates GitHub ownership and private-repository entitlement.
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      requestBody: {$ref: '#/components/requestBodies/OnboardingMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/OnboardingState'}
+        '400': {$ref: '#/components/responses/OnboardingError'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/{organization_id}/policy:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      operationId: selectOnboardingPolicy
+      description: Requires policy.manage and policy_id from the server-provided eligible policy list.
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      requestBody: {$ref: '#/components/requestBodies/OnboardingMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/OnboardingState'}
+        '400': {$ref: '#/components/responses/OnboardingError'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/onboarding/{organization_id}/proof:
+    parameters: [{$ref: '#/components/parameters/OrganizationID'}]
+    post:
+      operationId: submitOnboardingProof
+      description: Requires proof.execute, verify.basic, eligible policy and current GitHub access. Atomically commits one first-proof outbox job per onboarding revision; repeated requests return the existing proof. Worker admission rechecks capabilities, permission and quotas. A queued or UNKNOWN result is never PASS.
+      security: [{sessionCookie: [], csrfHeader: []}]
+      parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
+      requestBody: {$ref: '#/components/requestBodies/OnboardingMutation'}
+      responses:
+        '200':
+          description: Durable proof submission or existing first proof
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FirstProof'}
+        '400': {$ref: '#/components/responses/OnboardingError'}
+        '401': {$ref: '#/components/responses/OnboardingError'}
+        '403': {$ref: '#/components/responses/OnboardingError'}
+        '409': {$ref: '#/components/responses/OnboardingError'}
+        '503': {$ref: '#/components/responses/OnboardingError'}
+  /v1/product-catalog:
+    get:
+      operationId: readPublicProductCatalog
+      summary: Read public edition and feature information for the pricing page
+      description: Build-time projection of SafePatch product configuration. Contains no customer data and grants no entitlement or permission. Rebuild the marketing site to publish configuration changes.
+      security: []
+      responses:
+        '200':
+          description: Exactly the five permanent editions in commercial order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductCatalog'
+  /v1/billing/stripe/webhook:
+    post:
+      operationId: synchronizeStripeSubscription
+      summary: Verify a Stripe delivery and synchronize the organization subscription
+      description: Verifies the signature over the exact raw body. Duplicates are safe. Success means committed synchronization or an explicitly unsupported event type. Stripe entitlement-summary events are ignored.
+      parameters:
+        - in: header
+          name: Stripe-Signature
+          required: true
+          schema:
+            type: string
+            maxLength: 4096
+      requestBody:
+        required: true
+        description: Original snapshot-event JSON; maximum 262144 raw bytes. Do not normalize before signature verification.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '204':
+          description: Applied, already applied, or intentionally ignored event type
+        '400':
+          description: Invalid signature, event, or identity
+        '405':
+          description: POST required
+        '413':
+          description: Body exceeds the ingress limit or cannot be read
+        '503':
+          description: Synchronization failed; retry delivery. A pending receipt may already exist.
+components:
+  securitySchemes:
+    agentBearer:
+      type: http
+      scheme: bearer
+      description: Existing SafePatch login session supplied explicitly as a bearer; ambient cookies are not accepted by agent routes.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-safepatch_session
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    OrganizationID:
+      in: path
+      name: organization_id
+      required: true
+      schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+    TrustedOrigin:
+      in: header
+      name: Origin
+      required: true
+      schema: {type: string, format: uri}
+      description: Must exactly equal the configured public HTTPS origin.
+  requestBodies:
+    OnboardingMutation:
+      required: true
+      description: JSON object, at most 32768 bytes. Duplicate keys, unknown fields and trailing JSON are rejected. revision is required; action-specific fields are described on each operation.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [revision]
+            properties:
+              revision: {type: integer, minimum: 1}
+              edition: {type: string, enum: [community, developer, team, business, enterprise]}
+              mode: {type: string, enum: [trial, checkout]}
+              installation_id: {type: integer, minimum: 1}
+              repository_ids:
+                type: array
+                minItems: 1
+                maxItems: 50
+                uniqueItems: true
+                items: {type: string}
+              policy_id: {type: string}
+  responses:
+    OnboardingState:
+      description: Saved organization-scoped intent, not a grant of paid access
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OnboardingState'}
+    OnboardingError:
+      description: Fail-closed machine-readable error; no provider credentials or database details. Rate-limited requests return 429.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {type: string}
+  schemas:
+    ReplayDataset:
+      type: object
+      additionalProperties: false
+      description: Immutable redacted Replay artifact shared by every edition. This schema does not introduce a replay HTTP endpoint. Raw capture fields are projected through trusted privacy policy before storage.
+      required: [schema, scope, dataset_id, created_at, expires_at, redaction_digest, records]
+      properties:
+        schema: {type: string, const: safepatch.replay.dataset.v1}
+        scope: {$ref: '#/components/schemas/AgentScope'}
+        dataset_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time, description: Exclusive expiry; at most 366 days after creation. Current dataset_retention_days may shorten access but cannot extend this instant.}
+        redaction_digest: {$ref: '#/components/schemas/PassportDigest'}
+        records:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: '#/components/schemas/ReplayRecord'}
+    ReplayRecord:
+      type: object
+      additionalProperties: false
+      required: [id, input, expected, fixtures, source_trace]
+      properties:
+        id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        input: {type: object, description: Redacted scalar projection, bounded to 16 KiB before redaction.}
+        expected: {$ref: '#/components/schemas/ReplayObservation'}
+        fixtures:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, effect, input, output]
+            properties:
+              id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+              effect: {type: string, enum: [PURE, READ, WRITE, DESTRUCTIVE, UNKNOWN], description: DESTRUCTIVE and UNKNOWN block execution. Reads and writes use recorded fixtures only.}
+              input: {type: object}
+              output: {type: object}
+        source_trace:
+          type: object
+          additionalProperties: false
+          required: [trace_id, span_id]
+          properties:
+            trace_id: {type: string, pattern: '^([a-f0-9]{32})?$'}
+            span_id: {type: string, pattern: '^([a-f0-9]{16})?$'}
+          description: Both empty or both valid nonzero W3C IDs. Correlation only; baggage and captured parent authority are not propagated.
+    ReplayObservation:
+      type: object
+      additionalProperties: false
+      required: [complete, status, output, effects]
+      properties:
+        complete: {type: boolean}
+        status: {type: integer, minimum: 0, maximum: 599, description: Zero is unknown and cannot be marked complete.}
+        output: {type: object, description: Compared only after the same trusted privacy projection.}
+        effects: {type: array, maxItems: 32, items: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}, description: Ordered recorded-fixture IDs. Unrecorded effects make the observation incomplete.}
+    ReplayResult:
+      type: object
+      additionalProperties: false
+      required: [dataset_digest, decision, cases]
+      properties:
+        dataset_digest: {$ref: '#/components/schemas/PassportDigest'}
+        decision: {type: string, enum: [MATCH, DIFFERENT, UNKNOWN], description: MATCH covers only compared redacted observations. Never verification PASS or production authorization.}
+        cases:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: false
+            required: [record_id, decision, code]
+            properties:
+              record_id: {type: string}
+              decision: {type: string, enum: [MATCH, DIFFERENT, UNKNOWN]}
+              code: {type: string, enum: [COMPARED, UNAVAILABLE, SIDE_EFFECT_BLOCKED]}
+    AgentScope:
+      type: object
+      additionalProperties: false
+      required: [organization_id, repository_id]
+      properties:
+        organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        repository_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+    AgentCall:
+      type: object
+      additionalProperties: false
+      required: [server_id, tool_name, arguments]
+      properties:
+        server_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+        tool_name: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+        arguments:
+          type: object
+          description: Bounded to 16 KiB; its complete canonical digest must be explicitly approved by server-owned policy.
+    AgentIntent:
+      type: object
+      additionalProperties: false
+      description: Existing shared IntentContract; declarations are inert and cannot authorize production.
+      required: [goal, requirements, acceptance_criteria, required_behaviors, forbidden_behaviors, allowed_components, forbidden_components, protected_properties, security_constraints, database_constraints, api_constraints, business_constraints]
+      properties:
+        goal: {type: string, minLength: 1, maxLength: 8192}
+        requirements: {$ref: '#/components/schemas/AgentIntentStatements'}
+        acceptance_criteria: {$ref: '#/components/schemas/AgentIntentStatements'}
+        required_behaviors: {$ref: '#/components/schemas/AgentIntentStatements'}
+        forbidden_behaviors: {$ref: '#/components/schemas/AgentIntentStatements'}
+        allowed_components: {type: array, maxItems: 256, items: {type: string, maxLength: 512}}
+        forbidden_components: {type: array, maxItems: 256, items: {type: string, maxLength: 512}}
+        protected_properties: {$ref: '#/components/schemas/AgentIntentStatements'}
+        security_constraints: {$ref: '#/components/schemas/AgentIntentStatements'}
+        database_constraints: {$ref: '#/components/schemas/AgentIntentStatements'}
+        api_constraints: {$ref: '#/components/schemas/AgentIntentStatements'}
+        business_constraints: {$ref: '#/components/schemas/AgentIntentStatements'}
+    AgentIntentStatements:
+      type: array
+      maxItems: 256
+      items: {type: string, minLength: 1, maxLength: 4096}
+    AgentCompileRequest:
+      type: object
+      additionalProperties: false
+      required: [intent, calls]
+      properties:
+        intent: {$ref: '#/components/schemas/AgentIntent'}
+        calls: {type: array, minItems: 1, maxItems: 32, items: {$ref: '#/components/schemas/AgentCall'}}
+    AgentRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_id]
+      properties:
+        lease_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+    AgentInvokeRequest:
+      type: object
+      additionalProperties: false
+      required: [lease_id, invocation_id, call]
+      properties:
+        lease_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+        invocation_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+        call: {$ref: '#/components/schemas/AgentCall'}
+    AgentInventory:
+      type: object
+      additionalProperties: false
+      required: [schema, scope, tools]
+      properties:
+        schema: {type: string, const: safepatch.mcp.inventory.v1}
+        scope: {$ref: '#/components/schemas/AgentScope'}
+        tools:
+          type: array
+          maxItems: 128
+          items:
+            type: object
+            additionalProperties: false
+            required: [server_id, name, definition]
+            properties:
+              server_id: {type: string, maxLength: 128}
+              name: {type: string, maxLength: 128}
+              definition: {type: object, description: Untrusted bounded MCP tool definition; metadata is never authority.}
+    AgentCapabilities:
+      type: object
+      additionalProperties: false
+      required: [schema, scope, intent_digest, inventory_digest, policy_digest, lease_seconds, call_budget, grants]
+      properties:
+        schema: {type: string, const: safepatch.agent.capabilities.v1}
+        scope: {$ref: '#/components/schemas/AgentScope'}
+        intent_digest: {$ref: '#/components/schemas/PassportDigest'}
+        inventory_digest: {$ref: '#/components/schemas/PassportDigest'}
+        policy_digest: {$ref: '#/components/schemas/PassportDigest'}
+        lease_seconds: {type: integer, minimum: 1, maximum: 600}
+        call_budget: {type: integer, minimum: 1, maximum: 32}
+        earned: {$ref: '#/components/schemas/AgentEarnedBinding'}
+        grants:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: object
+            additionalProperties: false
+            required: [call_digest, tool_digest]
+            properties:
+              call_digest: {$ref: '#/components/schemas/PassportDigest'}
+              tool_digest: {$ref: '#/components/schemas/PassportDigest'}
+    AgentEarnedBinding:
+      type: object
+      additionalProperties: false
+      required: [policy_id, challenge_digest, proof_set_digest]
+      description: Optional shared capability binding for server-issued proof-based escalation. Never accepted as caller authority. Ordinary leases omit this field.
+      properties:
+        policy_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$'}
+        challenge_digest: {$ref: '#/components/schemas/PassportDigest'}
+        proof_set_digest: {$ref: '#/components/schemas/PassportDigest'}
+    AgentLease:
+      type: object
+      additionalProperties: false
+      required: [lease_id, expires_at, capabilities_digest]
+      properties:
+        lease_id: {type: string}
+        expires_at: {type: string, format: date-time}
+        capabilities_digest: {$ref: '#/components/schemas/PassportDigest'}
+    AgentResult:
+      type: object
+      additionalProperties: false
+      required: [receipt, output]
+      properties:
+        receipt:
+          type: object
+          additionalProperties: false
+          required: [outcome, result_digest]
+          properties:
+            outcome: {type: string, enum: [UNKNOWN, RETURNED, TOOL_ERROR]}
+            result_digest: {type: string, description: SHA-256 of canonical MCP result; empty for an unresolved invocation.}
+        output: {type: [object, 'null'], description: Untrusted MCP output; never an approval or verification PASS.}
+    LanguageMaturity:
+      type: string
+      enum: [PV0, PV1, PV2, PV3, PV4, PV5, PV6, PV7, PV8]
+      description: Technical support depth, not a proof level, PASS result or commercial grant. Current installed SDK contracts substantiate at most PV3.
+    LanguagePackDescriptor:
+      type: object
+      additionalProperties: false
+      required: [id, version, language, capabilities, maturity]
+      properties:
+        id: {type: string, maxLength: 128}
+        version: {type: string, maxLength: 128}
+        language: {type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$'}
+        capabilities:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, enum: [language.detect, language.sir.normalize, language.verify]}
+        maturity: {$ref: '#/components/schemas/LanguageMaturity'}
+    LanguageSupportReport:
+      type: object
+      additionalProperties: false
+      required: [schema, target_languages, installed_languages, rubric, languages]
+      description: Public technical support metadata, with installed descriptors and operation requirements from the shared registry/application mapping. Roadmap entries never imply installed support or entitlement.
+      properties:
+        schema: {type: string, const: safepatch.language-support.v1}
+        target_languages: {type: integer, minimum: 0}
+        installed_languages: {type: integer, minimum: 0}
+        rubric:
+          type: array
+          minItems: 9
+          maxItems: 9
+          items:
+            type: object
+            additionalProperties: false
+            required: [level, requirement]
+            properties:
+              level: {$ref: '#/components/schemas/LanguageMaturity'}
+              requirement: {type: string}
+        languages:
+          type: array
+          maxItems: 128
+          items:
+            type: object
+            additionalProperties: false
+            required: [language, name, installed, maturity, operations, limitations]
+            properties:
+              language: {type: string}
+              name: {type: string}
+              installed: {type: boolean}
+              maturity: {$ref: '#/components/schemas/LanguageMaturity'}
+              pack: {$ref: '#/components/schemas/LanguagePackDescriptor'}
+              limitations:
+                type: array
+                minItems: 1
+                items: {type: string}
+              operations:
+                type: array
+                maxItems: 2
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [capability, feature, permission]
+                  properties:
+                    capability: {type: string, enum: [language.detect, language.sir.normalize]}
+                    feature: {type: string}
+                    permission: {type: string}
+    SafeUpgradeCandidate:
+      type: object
+      additionalProperties: false
+      required: [schema, change, dependency, files]
+      description: >-
+        Immutable prepared dependency upgrade, shared across editions. Bounded to
+        256 KiB. A trusted source must verify exact resolved versions, every file
+        digest and absence of undeclared edits at the pinned base/head commits.
+        A structurally valid candidate is not evidence of a safe upgrade.
+      properties:
+        schema: {type: string, const: safepatch.safe-upgrade.v1}
+        change:
+          type: object
+          additionalProperties: false
+          required: [organization_id, repository_id, base_sha, head_sha]
+          properties:
+            organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+            repository_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+            base_sha: {type: string, pattern: '^[a-f0-9]{40}$'}
+            head_sha: {type: string, pattern: '^[a-f0-9]{40}$'}
+        dependency:
+          type: object
+          additionalProperties: false
+          required: [ecosystem, name, from_version, to_version]
+          properties:
+            ecosystem: {type: string, enum: [go, npm, pypi, maven, cargo, nuget]}
+            name: {type: string, pattern: '^[a-zA-Z0-9@][a-zA-Z0-9@._/+-]{0,255}$'}
+            from_version: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,127}$'}
+            to_version: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._+-]{0,127}$'}
+        files:
+          type: array
+          minItems: 1
+          maxItems: 32
+          description: Distinct repository-relative manifest/lockfile paths, sorted for canonical identity; each before/after digest must differ.
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, before_digest, after_digest]
+            properties:
+              path: {type: string, maxLength: 4096}
+              before_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+              after_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+    TrustAuthorizationDecision:
+      type: string
+      enum: [AUTHORIZE, REVIEW, ESCROW, BLOCK, REVERIFY]
+      description: Edition-neutral technical decision. Not an actor permission, bearer token, or production execution command. Missing/unknown values never authorize.
+    TrustKernelResult:
+      type: object
+      additionalProperties: false
+      required: [schema, decision, reasons, input_digest, policy]
+      description: Retained with change artifacts for all editions. Policy is evaluated by the shared policy engine; input_digest binds the technical inputs, subject, security controls and evaluation time. Precedence is BLOCK, REVERIFY, ESCROW, REVIEW, AUTHORIZE.
+      properties:
+        schema: {type: string, const: safepatch.trust-decision.v1}
+        decision: {$ref: '#/components/schemas/TrustAuthorizationDecision'}
+        reasons:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, maxLength: 64}
+        input_digest: {type: string, pattern: '^([a-f0-9]{64})?$'}
+        policy: {type: object, description: Existing safepatch.policy-result.v1 diagnostic result. No policy result supplied by a caller is accepted as authority.}
+    SafeUpgradeResult:
+      type: object
+      additionalProperties: false
+      required: [schema, candidate_id, change_id, run_id, decision, evidence_reference]
+      description: Shared workflow outcome. PASS means the configured verification and policy passed, never authorization to merge/deploy. Errors return UNKNOWN and empty identifiers/reference. Requires automation.safe_upgrade, proof.execute and authoritative safe_upgrades_monthly quota admission.
+      properties:
+        schema: {type: string, const: safepatch.safe-upgrade-result.v1}
+        candidate_id: {type: string, pattern: '^(upgrade_[a-f0-9]{64})?$'}
+        change_id: {type: string, pattern: '^(change_[a-f0-9]{64})?$'}
+        run_id: {type: string, maxLength: 128}
+        decision: {type: string, enum: [PASS, FAIL, UNKNOWN]}
+        evidence_reference: {type: string, maxLength: 256}
+    GlobalChangeID:
+      type: string
+      pattern: '^globalchange_[a-f0-9]{64}$'
+      description: SHA-256 of safepatch.global-patch.v1 followed by a newline and canonical GlobalPatch JSON. This identity is not an authorization token or verification result.
+    GlobalPatch:
+      type: object
+      additionalProperties: false
+      required: [schema, organization_id, intent_digest, changes, dependencies]
+      description: >-
+        Immutable coordinated changes within one organization, shared by every
+        edition. Canonical size is at most 1 MiB. Exactly one non-noop change per
+        repository; dependencies form a DAG of existing shared ChangeIDs. Changes
+        sort by repository_id; dependencies sort by change_id then requires_change_id.
+        This schema does not add an HTTP endpoint or permit cross-tenant access.
+      properties:
+        schema: {type: string, const: safepatch.global-patch.v1}
+        organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        intent_digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+        changes:
+          type: array
+          minItems: 2
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: false
+            required: [organization_id, repository_id, base_sha, head_sha]
+            properties:
+              organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+              repository_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+              base_sha: {type: string, pattern: '^[a-f0-9]{40}$'}
+              head_sha: {type: string, pattern: '^[a-f0-9]{40}$'}
+        dependencies:
+          type: array
+          maxItems: 1024
+          items:
+            type: object
+            additionalProperties: false
+            required: [change_id, requires_change_id]
+            properties:
+              change_id: {type: string, pattern: '^change_[a-f0-9]{64}$'}
+              requires_change_id: {type: string, pattern: '^change_[a-f0-9]{64}$'}
+    GlobalPatchLocator:
+      type: object
+      additionalProperties: false
+      required: [organization_id, repository_ids, global_change_id, reference]
+      description: Untrusted storage routing hint. Requires graph.global_change and independent permission for the operation. All repositories must be authorized and the exact complete stored roster must match before returning content. No permanent artifact URL is exposed.
+      properties:
+        organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        repository_ids:
+          type: array
+          minItems: 2
+          maxItems: 64
+          uniqueItems: true
+          description: Sorted lexicographically, matching every repository in GlobalPatch.
+          items: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        global_change_id: {$ref: '#/components/schemas/GlobalChangeID'}
+        reference:
+          type: object
+          additionalProperties: false
+          required: [sha256, bytes]
+          properties:
+            sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+            bytes: {type: integer, minimum: 0, maximum: 1048576}
+    CompositionManifest:
+      type: object
+      additionalProperties: false
+      required: [schema, id, organization_id, policy_digest, components, connections]
+      description: >-
+        Immutable explicit composition shared by every edition, bounded to 1 MiB.
+        Component Passports and interaction contracts are pinned exactly. This
+        artifact schema does not add an HTTP endpoint or authorize production.
+      properties:
+        schema: {type: string, const: safepatch.composition.v1}
+        id: {type: string, maxLength: 128}
+        organization_id: {type: string, maxLength: 128}
+        policy_digest: {$ref: '#/components/schemas/PassportDigest'}
+        components:
+          type: array
+          minItems: 2
+          maxItems: 128
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, repository_id, commit, passport_digest]
+            properties:
+              id: {type: string, maxLength: 128}
+              repository_id: {type: string, maxLength: 128}
+              commit: {type: string, pattern: '^[a-f0-9]{40}$'}
+              passport_digest: {$ref: '#/components/schemas/PassportDigest'}
+        connections:
+          type: array
+          minItems: 1
+          maxItems: 1024
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, from, to, contract_digest]
+            properties:
+              id: {type: string, maxLength: 128}
+              from: {type: string, maxLength: 128}
+              to: {type: string, maxLength: 128}
+              contract_digest: {$ref: '#/components/schemas/PassportDigest'}
+    CompositionAttestation:
+      type: object
+      additionalProperties: false
+      required: [subject_id, manifest_digest, policy_digest, evidence_digest, status, issued_at, valid_until]
+      description: Authoritative shared-verifier result for one connection or the whole manifest. Schema validity alone does not authenticate this statement; untrusted uploaded PASS fields must never be used as authority.
+      properties:
+        subject_id: {type: string, maxLength: 128}
+        manifest_digest: {$ref: '#/components/schemas/PassportDigest'}
+        policy_digest: {$ref: '#/components/schemas/PassportDigest'}
+        evidence_digest: {$ref: '#/components/schemas/PassportDigest'}
+        status: {type: string, enum: [PASS, FAIL, UNKNOWN]}
+        issued_at: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+    CompositionGuardResult:
+      type: object
+      additionalProperties: false
+      required: [schema, organization_id, manifest_digest, evaluated_at, valid_until, decision, checks]
+      description: >-
+        Requires proof.composition, independent proof.execute permission and
+        admission for every repository. Missing/expired component, connection or
+        combined proof is UNKNOWN. Individual PASS results cannot replace evidence
+        for the exact combined manifest. Result validity is capped at 60 seconds.
+      properties:
+        schema: {type: string, const: safepatch.composition-result.v1}
+        organization_id: {type: string, maxLength: 128}
+        manifest_digest: {$ref: '#/components/schemas/PassportDigest'}
+        evaluated_at: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+        decision: {type: string, enum: [PASS, FAIL, UNKNOWN]}
+        checks:
+          type: array
+          minItems: 4
+          maxItems: 1153
+          items:
+            type: object
+            additionalProperties: false
+            required: [kind, id, status, reason, evidence_digest]
+            properties:
+              kind: {type: string, enum: [component, connection, combined]}
+              id: {type: string, maxLength: 128}
+              status: {type: string, enum: [PASS, FAIL, UNKNOWN]}
+              reason: {type: string, enum: [missing_proof, expired_proof, component_verification, missing_evidence, expired_evidence, verification_result]}
+              evidence_digest: {type: string, pattern: '^([a-f0-9]{64})?$'}
+    ProofDependencyGraph:
+      type: object
+      additionalProperties: false
+      description: >-
+        Immutable repository/change-scoped dependency DAG shared by every edition.
+        Canonical JSON is bounded to 1 MiB, 1024 nodes and 4096 edges. Dependencies
+        point to prerequisites; cycles, missing endpoints and duplicate IDs are
+        rejected. Structural validity does not establish source authority. This
+        artifact schema does not add an HTTP endpoint.
+      required: [schema, id, change, created_at, nodes]
+      properties:
+        schema: {type: string, const: safepatch.proof-dependency-graph.v1}
+        id: {type: string, maxLength: 128}
+        change:
+          type: object
+          additionalProperties: false
+          required: [organization_id, repository_id, base_sha, head_sha]
+          properties:
+            organization_id: {type: string, maxLength: 128}
+            repository_id: {type: string, maxLength: 128}
+            base_sha: {type: string, pattern: '^[a-f0-9]{40}$'}
+            head_sha: {type: string, pattern: '^[a-f0-9]{40}$'}
+        created_at: {type: string, format: date-time}
+        nodes:
+          type: array
+          minItems: 1
+          maxItems: 1024
+          items: {$ref: '#/components/schemas/ProofDependencyNode'}
+    ProofDependencyNode:
+      type: object
+      additionalProperties: false
+      required: [id, kind, digest, dependencies, status, recorded_at, valid_until]
+      properties:
+        id: {type: string, maxLength: 128}
+        kind: {type: string, enum: [input, proof]}
+        digest: {$ref: '#/components/schemas/PassportDigest'}
+        dependencies:
+          type: array
+          maxItems: 1024
+          uniqueItems: true
+          items: {type: string, maxLength: 128}
+        status:
+          type: string
+          enum: [PASS, FAIL, UNKNOWN]
+          description: Original verification result. Input nodes require UNKNOWN and no dependencies; proof nodes require at least one dependency.
+        recorded_at: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+    ProofDependencySnapshot:
+      type: object
+      additionalProperties: false
+      required: [graph_digest, observed_at, valid_until, nodes]
+      description: Authoritative current snapshot bound to the exact graph digest. Validity must be at most 60 seconds; omitted observations are UNKNOWN, never unchanged by default.
+      properties:
+        graph_digest: {$ref: '#/components/schemas/PassportDigest'}
+        observed_at: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+        nodes:
+          type: array
+          maxItems: 1024
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, available, digest]
+            properties:
+              id: {type: string, maxLength: 128}
+              available: {type: boolean}
+              digest: {type: string, pattern: '^([a-f0-9]{64})?$', description: Empty exactly when unavailable.}
+    LivingProofState:
+      type: string
+      enum: [CURRENT, STALE, UNKNOWN, FAILED, EXPIRED]
+    LivingProof:
+      type: object
+      additionalProperties: false
+      description: >-
+        Immutable evaluation against a dependency snapshot, bounded to 1 MiB.
+        CURRENT is freshness of the recorded proof only, never production approval.
+        Decoding recomputes historical state against the graph; it does not establish
+        present validity. Hosted reevaluation requires proof.living, tenant resolution,
+        proof.execute authorization and quota admission. Edition never changes schema.
+      required: [schema, graph_digest, snapshot, evaluated_at, valid_until, state, proofs, needs_reverification]
+      properties:
+        schema: {type: string, const: safepatch.living-proof.v1}
+        graph_digest: {$ref: '#/components/schemas/PassportDigest'}
+        snapshot: {$ref: '#/components/schemas/ProofDependencySnapshot'}
+        evaluated_at: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+        state: {$ref: '#/components/schemas/LivingProofState'}
+        proofs:
+          type: array
+          minItems: 1
+          maxItems: 1024
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, state, reasons]
+            properties:
+              id: {type: string, maxLength: 128}
+              state: {$ref: '#/components/schemas/LivingProofState'}
+              reasons:
+                type: array
+                maxItems: 1028
+                items: {type: string, maxLength: 139}
+        needs_reverification:
+          type: array
+          maxItems: 1024
+          uniqueItems: true
+          items: {type: string, maxLength: 128}
+    SafePatchPassport:
+      type: object
+      additionalProperties: false
+      description: >-
+        Immutable portable verification statement for every edition. This is an
+        artifact schema, not a deployment authorization or a signing endpoint.
+        Decode validates structure; authenticity requires an externally trusted
+        organization-scoped signing key. Canonical JSON is bounded to 16384 bytes.
+      required: [schema, payload, signature]
+      properties:
+        schema:
+          type: string
+          const: safepatch.passport.v1
+        payload:
+          $ref: '#/components/schemas/PassportPayload'
+        signature:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PassportSignature'
+    PassportPayload:
+      type: object
+      additionalProperties: false
+      required: [change, change_id, run_id, intent_digest, commit, artifact_digest, sbom, provenance, proof_level, proof_plan_digest, policy_decision, evidence_graph_digest, verification_decision, issued_at]
+      properties:
+        change:
+          type: object
+          additionalProperties: false
+          required: [organization_id, repository_id, base_sha, head_sha]
+          properties:
+            organization_id:
+              type: string
+              pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'
+            repository_id:
+              type: string
+              pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'
+            base_sha:
+              type: string
+              pattern: '^[a-f0-9]{40}$'
+            head_sha:
+              type: string
+              pattern: '^[a-f0-9]{40}$'
+        change_id:
+          type: string
+          pattern: '^change_[a-f0-9]{64}$'
+          description: Must equal the shared ChangeID computed from change.
+        run_id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'
+        intent_digest:
+          $ref: '#/components/schemas/PassportDigest'
+        commit:
+          type: string
+          pattern: '^[a-f0-9]{40}$'
+          description: Must equal change.head_sha.
+        artifact_digest:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PassportDigest'
+          description: SHA-256 of build output bytes; null means unavailable.
+        sbom:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PassportReference'
+        provenance:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/PassportReference'
+        proof_level:
+          type: string
+          enum: [UNKNOWN, L0, L1, L2, L3, L4, L5, L6, L7, L8]
+          description: Achieved level from completed observations, never a planned target alone.
+        proof_plan_digest:
+          $ref: '#/components/schemas/PassportDigest'
+        policy_decision:
+          type: object
+          additionalProperties: false
+          required: [policy_digest, result_digest, status]
+          properties:
+            policy_digest:
+              $ref: '#/components/schemas/PassportDigest'
+            result_digest:
+              $ref: '#/components/schemas/PassportDigest'
+            status:
+              type: string
+              enum: [PASS, FAIL, WARN, ERROR, SKIPPED, UNAVAILABLE, UNKNOWN]
+        evidence_graph_digest:
+          $ref: '#/components/schemas/PassportDigest'
+        verification_decision:
+          type: string
+          enum: [PASS, FAIL, UNKNOWN]
+          description: PASS requires known achieved level and PASS policy; never production approval.
+        issued_at:
+          type: string
+          format: date-time
+          description: UTC issuance instant with up to nanosecond precision.
+    PlatformSSOIdentity:
+      type: object
+      additionalProperties: false
+      required: [organization_id, actor]
+      description: Organization-bound result of the shared trusted identity adapter followed by enterprise.sso, membership and proof.view checks. Not a global login credential; session adapters must retain the organization binding and recheck access. No automatic account linking by email.
+      properties:
+        organization_id: {type: string}
+        actor: {$ref: '#/components/schemas/PlatformPrincipal'}
+    PlatformPrincipal:
+      type: object
+      additionalProperties: false
+      required: [ID, Kind]
+      description: Existing shared Go Principal representation. Only trusted authentication supplies this object, never browser role or identity claims.
+      properties:
+        ID: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        Kind: {type: string, enum: [user, service_account]}
+    PlatformAuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, organization_id, actor, action, resource_id, outcome, occurred_at]
+      description: One immutable baseline audit format for every edition. Outcome describes operation completion, not the proof verdict. No untrusted free-text credential or prompt payload is stored here.
+      properties:
+        id: {type: string}
+        organization_id: {type: string}
+        actor: {$ref: '#/components/schemas/PlatformPrincipal'}
+        action: {type: string, maxLength: 128}
+        resource_id: {type: string}
+        outcome: {type: string, enum: [SUCCEEDED, DENIED, FAILED, UNKNOWN]}
+        occurred_at: {type: string, format: date-time}
+    PlatformAuditPage:
+      type: object
+      additionalProperties: false
+      required: [events]
+      properties:
+        events: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/PlatformAuditEvent'}}
+        next_after_id: {type: string}
+    PlatformAuditExport:
+      type: object
+      additionalProperties: false
+      required: [schema, organization_id, page, digest]
+      description: Bounded export of shared audit records. Requires enterprise.audit and organization.manage. SHA-256 covers Go JSON encoding of schema, organization_id and page in that order; it is not a signature or completeness proof.
+      properties:
+        schema: {type: string, const: safepatch.audit-export.v1}
+        organization_id: {type: string}
+        page: {$ref: '#/components/schemas/PlatformAuditPage'}
+        digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+    PublicDownload:
+      type: object
+      additionalProperties: false
+      required: [id, version, channel, filename, sha256, bytes]
+      properties:
+        id: {type: string}
+        version: {type: string}
+        channel: {type: string, const: stable}
+        filename: {type: string}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        bytes: {type: integer, minimum: 1}
+    DownloadLink:
+      type: object
+      additionalProperties: false
+      required: [url, expires_at, filename, sha256, bytes]
+      properties:
+        url: {type: string, format: uri, description: Short-lived HTTPS bearer URL. Never log, persist or cache this value.}
+        expires_at: {type: string, format: date-time}
+        filename: {type: string}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        bytes: {type: integer, minimum: 1}
+    ReleaseChannel:
+      type: string
+      enum: [stable, beta, nightly, lts]
+      description: Canonical distribution channel, independent of product version and commercial edition. Legacy LTS input is accepted at the application boundary and normalized to lts.
+    PlatformRelease:
+      type: object
+      additionalProperties: false
+      required: [version, channel, supported_until]
+      description: Shared trusted release catalog metadata, independent of edition. LTS artifact and support admission requires enterprise.lts and organization.manage; stable, beta and nightly use verify.basic and organization.manage. Legacy input LTS is normalized to lts; output is always canonical. Channel selection never grants access, changes edition/version or installs software.
+      properties:
+        version: {type: string, maxLength: 128, pattern: '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'}
+        channel: {$ref: '#/components/schemas/ReleaseChannel'}
+        supported_until: {type: string, format: date-time}
+    LicenseDeploymentPolicy:
+      type: object
+      additionalProperties: false
+      required: [mode, refresh_interval, grace_period]
+      description: Trusted operator configuration, never repository or license input. Durations are Go time.Duration integer nanoseconds. Air-gapped mode requires both durations to be zero; connected mode requires refresh_interval between one minute and 24 hours. Grace never extends signed license expiry.
+      properties:
+        mode: {type: string, enum: [connected, air_gapped]}
+        refresh_interval: {type: integer, minimum: 0, maximum: 86400000000000}
+        grace_period: {type: integer, minimum: 0, maximum: 2592000000000000}
+    LicenseAvailability:
+      type: object
+      additionalProperties: false
+      required: [mode, state, valid_until]
+      description: Connectivity state of a currently valid signed license, not a proof or production authorization. Failed validation returns an error rather than an active status. The empty mode denotes the standalone license provider.
+      properties:
+        mode: {type: string, enum: ['', connected, air_gapped]}
+        state: {type: string, enum: [current, grace, offline]}
+        refresh_due_at: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+    LicenseRefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [organization_id, license_id, nonce]
+      description: Outbound connected-client contract for POST https://safepatch.dev/api/v1/licenses/status. This specification does not add an issuer handler to the self-hosted API. No license keys, repository data or signed document are uploaded.
+      properties:
+        organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        license_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        nonce: {type: string, pattern: '^[a-f0-9]{64}$'}
+    LicenseRefreshResponse:
+      type: object
+      additionalProperties: false
+      required: [organization_id, license_id, nonce, status, envelope]
+      description: HTTPS-authenticated response must echo the exact requested organization, license ID and nonce. Active requires a signed envelope independently verified by the node; revoked and denied require null envelope. Unknown statuses and malformed responses fail closed. Retryable transport errors, HTTP 408/429 and 5xx never advance confirmed_at.
+      properties:
+        organization_id: {type: string}
+        license_id: {type: string}
+        nonce: {type: string, pattern: '^[a-f0-9]{64}$'}
+        status: {type: string, enum: [active, revoked, denied]}
+        envelope:
+          oneOf:
+            - {$ref: '#/components/schemas/SignedEnterpriseLicense'}
+            - {type: 'null'}
+    SignedEnterpriseLicense:
+      type: object
+      additionalProperties: false
+      required: [schema, algorithm, key_id, document, signature]
+      description: Publicly verifiable organization license. The node trusts only provisioned issuer public keys; this is not a bearer authorization credential or a license-upload endpoint.
+      properties:
+        schema: {type: string, const: safepatch.signed-license.v1}
+        algorithm: {type: string, const: Ed25519}
+        key_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        document: {$ref: '#/components/schemas/EnterpriseLicenseDocument'}
+        signature: {type: string, contentEncoding: base64, minLength: 88, maxLength: 88}
+    EnterpriseLicenseDocument:
+      type: object
+      additionalProperties: false
+      required: [schema, license_id, organization_id, edition, edition_version_id, features, limits, issued_at, expires_at]
+      properties:
+        schema: {type: string, const: safepatch.license.v1}
+        license_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        organization_id: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}
+        edition: {type: string, enum: [community, developer, team, business, enterprise]}
+        edition_version_id: {type: string, maxLength: 64, description: Must match an existing immutable version of the signed edition. Edition metadata never supplies missing grants.}
+        issued_at: {type: string, format: date-time, description: Whole-second RFC3339 timestamp; validity starts inclusively.}
+        expires_at: {type: string, format: date-time, description: Whole-second RFC3339 timestamp after issued_at; expiration is exclusive, with no grace period.}
+        features:
+          type: array
+          maxItems: 512
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, enabled, limit_value]
+            properties:
+              key: {type: string, description: Unique stable key from SafePatch's trusted feature catalog.}
+              enabled: {type: boolean}
+              limit_value: {type: [integer, 'null'], minimum: 0, description: Nullable per-feature limit; null is unspecified, not unlimited.}
+        limits:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, state, value]
+            properties:
+              key:
+                type: string
+                enum: [repositories, developers, proof_credits_monthly, verification_concurrency, retention_days, artifact_storage_bytes, replay_requests_monthly, fuzz_seconds_monthly, dataset_retention_days, replay_concurrency]
+              state: {type: string, enum: [INTEGER, UNLIMITED, DISABLED]}
+              value: {type: integer, minimum: 0, description: Non-integer states require zero. Missing keys are disabled.}
+    VerificationControls:
+      type: object
+      additionalProperties: false
+      description: Immutable protected baseline or proposed configuration. Complete extraction must cover all effective control surfaces, including trusted tool/code digests. No edition or guard-disable field exists.
+      required: [schema, organization_id, subject, complete, scanners, tests, coverage_threshold_bps, timeout_millis, security_exclusions, policy]
+      properties:
+        schema: {type: string, const: safepatch.verification-controls.v1}
+        organization_id: {type: string}
+        subject:
+          type: object
+          additionalProperties: false
+          required: [repository_id, revision]
+          properties:
+            repository_id: {type: string}
+            revision: {type: string}
+        complete: {type: boolean}
+        scanners:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/VerificationControlCheck'}
+        tests:
+          type: array
+          maxItems: 4096
+          items: {$ref: '#/components/schemas/VerificationControlCheck'}
+        coverage_threshold_bps: {type: [integer, 'null'], minimum: 0, maximum: 10000}
+        timeout_millis: {type: integer, minimum: 1, maximum: 86400000}
+        security_exclusions:
+          type: array
+          maxItems: 256
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 512}
+        policy:
+          type: object
+          description: Validated shared safepatch.policy.v1 document; the protected baseline remains the evaluator for the change.
+    VerificationControlCheck:
+      type: object
+      additionalProperties: false
+      required: [id, enabled, config_digest]
+      properties:
+        id: {type: string, description: Baseline verification capability required in the actual proof plan.}
+        enabled: {type: boolean}
+        config_digest: {$ref: '#/components/schemas/PassportDigest'}
+    VerificationIntegrity:
+      type: object
+      additionalProperties: false
+      required: [schema, base_digest, head_digest, status, changed, findings]
+      properties:
+        schema: {type: string, const: safepatch.verification-integrity.v1}
+        base_digest: {type: string}
+        head_digest: {type: string}
+        status: {type: string, enum: [INTACT, BLOCKED, UNKNOWN]}
+        changed: {type: boolean}
+        findings:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, control_id]
+            properties:
+              code:
+                type: string
+                enum: [SCANNER_REMOVED, TEST_DISABLED, COVERAGE_THRESHOLD_REDUCED, POLICY_WEAKENED, SECURITY_EXCLUSION_ADDED, VERIFICATION_TIMEOUT_REDUCED, CONTROL_CHANGE_UNCLASSIFIED]
+              control_id: {type: string, description: Stable control/rule ID or exclusion digest; never executable content.}
+    VerificationControlReview:
+      type: object
+      additionalProperties: false
+      description: Trusted server record only; this schema is not an endpoint for self-declared approvals. Scope and both revisions are bound by ChangeID and control digests.
+      required: [id, change_id, base_digest, head_digest, reviewer_id, origin, issued_at, expires_at]
+      properties:
+        id: {type: string}
+        change_id: {type: string}
+        base_digest: {$ref: '#/components/schemas/PassportDigest'}
+        head_digest: {$ref: '#/components/schemas/PassportDigest'}
+        reviewer_id: {type: string}
+        origin: {type: string, const: HUMAN_SESSION}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    TestTrustSnapshot:
+      type: object
+      additionalProperties: false
+      required: [schema, organization_id, subject, producer, producer_version, source_digest, complete, tests, coverage]
+      description: Edition-independent, immutable normalized facts. Full manifest and coverage provenance must come from trusted extraction; shape validation does not authenticate scanner claims.
+      properties:
+        schema: {type: string, const: safepatch.testtrust-snapshot.v1}
+        organization_id: {type: string}
+        subject:
+          type: object
+          additionalProperties: false
+          required: [repository_id, revision]
+          properties:
+            repository_id: {type: string}
+            revision: {type: string}
+        producer: {type: string}
+        producer_version: {type: string}
+        source_digest: {$ref: '#/components/schemas/PassportDigest'}
+        complete: {type: boolean}
+        tests:
+          type: array
+          maxItems: 1024
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, source, complete, skip, negative, assertions]
+            properties:
+              id: {type: string}
+              source: {$ref: '#/components/schemas/TestTrustLocation'}
+              complete: {type: boolean}
+              skip: {type: string, enum: [ENABLED, SKIPPED, CONDITIONAL, UNKNOWN]}
+              negative: {type: string, enum: [NEGATIVE, POSITIVE, UNKNOWN]}
+              assertions:
+                type: array
+                maxItems: 4096
+                description: At most 4096 assertions across the entire snapshot; stable IDs are local to each test.
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [id, subject_digest, predicate_digest, relation, bound]
+                  properties:
+                    id: {type: string}
+                    subject_digest: {$ref: '#/components/schemas/PassportDigest'}
+                    predicate_digest: {$ref: '#/components/schemas/PassportDigest'}
+                    relation: {type: string, enum: [EQ, NE, GT, GE, LT, LE, UNKNOWN]}
+                    bound:
+                      type: string
+                      maxLength: 96
+                      description: Exact decimal for numeric relations; empty for UNKNOWN.
+        coverage:
+          type: object
+          additionalProperties: false
+          required: [known, basis_digest, covered, total]
+          properties:
+            known: {type: boolean}
+            basis_digest: {type: string}
+            covered: {type: integer, minimum: 0, maximum: 1000000000}
+            total: {type: integer, minimum: 0, maximum: 1000000000}
+          description: Known coverage requires a positive total, covered <= total and a trusted configuration digest. Unknown coverage uses empty digest and zero counts.
+    TestTrustLocation:
+      type: object
+      additionalProperties: false
+      required: [path, start_line, start_column, end_line, end_column]
+      properties:
+        path: {type: string, maxLength: 512}
+        start_line: {type: integer, minimum: 0}
+        start_column: {type: integer, minimum: 0}
+        end_line: {type: integer, minimum: 0}
+        end_column: {type: integer, minimum: 0}
+    TestTrustResult:
+      type: object
+      additionalProperties: false
+      required: [schema, organization_id, repository_id, base_revision, head_revision, base_digest, head_digest, decision, findings, incomplete, mutation_status]
+      description: Diagnostic findings, never production authorization. REGRESSION can coexist with incomplete analysis; absence of findings is UNKNOWN unless all required evidence is complete.
+      properties:
+        schema: {type: string, const: safepatch.testtrust.v1}
+        organization_id: {type: string}
+        repository_id: {type: string}
+        base_revision: {type: string}
+        head_revision: {type: string}
+        base_digest: {type: string}
+        head_digest: {type: string}
+        decision: {type: string, enum: [NO_REGRESSION, REGRESSION, UNKNOWN]}
+        incomplete: {type: boolean}
+        mutation_status: {type: string, const: NOT_RUN}
+        findings:
+          type: array
+          maxItems: 12289
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, test_id, assertion_id, source]
+            properties:
+              code:
+                type: string
+                enum: [REMOVED_TEST, REMOVED_ASSERTION, WEAKENED_ASSERTION, SKIPPED_TEST, COVERAGE_REDUCTION, NEGATIVE_TEST_REMOVED, ASSERTION_CHANGE_UNCLASSIFIED]
+              test_id: {type: string}
+              assertion_id: {type: string}
+              source: {$ref: '#/components/schemas/TestTrustLocation'}
+    BehaviorDNA:
+      type: object
+      additionalProperties: false
+      description: Immutable diagnostic summary of redacted recorded observations. Digests do not prove authenticity. Identical format for every edition.
+      required: [schema, scope, dataset_id, dataset_digest, redaction_digest, created_at, expires_at, metrics, cases]
+      properties:
+        schema: {type: string, const: safepatch.behaviordna.v1}
+        scope: {$ref: '#/components/schemas/AgentScope'}
+        dataset_id: {type: string, minLength: 1, maxLength: 128}
+        dataset_digest: {$ref: '#/components/schemas/PassportDigest'}
+        redaction_digest: {$ref: '#/components/schemas/PassportDigest'}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        metrics:
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: Sorted by unique name; literal scalar pointers into privacy-redacted input or output.
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, source, pointer]
+            properties:
+              name: {type: string, minLength: 1, maxLength: 128}
+              source: {type: string, enum: [INPUT, OUTPUT]}
+              pointer: {type: string, minLength: 2, maxLength: 256}
+        cases:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, complete, status, effects, values]
+            properties:
+              id: {type: string, minLength: 1, maxLength: 128}
+              complete: {type: boolean}
+              status: {type: integer, minimum: 0, maximum: 599}
+              effects:
+                type: array
+                maxItems: 32
+                items: {type: string, minLength: 1, maxLength: 128}
+              values:
+                type: object
+                maxProperties: 64
+                description: Known metrics only. Canonical rational strings, such as 1/10; missing measurements are UNKNOWN.
+                additionalProperties:
+                  type: string
+                  maxLength: 400
+                  pattern: '^-?(0|[1-9][0-9]*)(/[1-9][0-9]*)?$'
+    BusinessInvariantPolicy:
+      type: object
+      additionalProperties: false
+      required: [schema, scope, policy_id, version, rules]
+      properties:
+        schema: {type: string, const: safepatch.business-invariants.v1}
+        scope: {$ref: '#/components/schemas/AgentScope'}
+        policy_id: {type: string, minLength: 1, maxLength: 128}
+        version: {type: string, minLength: 1, maxLength: 128}
+        rules:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, terms, operator, bound]
+            properties:
+              id: {type: string, minLength: 1, maxLength: 128}
+              operator: {type: string, enum: [EQ, LE, GE]}
+              bound: {$ref: '#/components/schemas/InvariantDecimal'}
+              terms:
+                type: array
+                minItems: 1
+                maxItems: 64
+                description: Unique metric names with nonzero coefficients. The sum is compared to bound for every observed case.
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [metric, coefficient]
+                  properties:
+                    metric: {type: string, minLength: 1, maxLength: 128}
+                    coefficient: {$ref: '#/components/schemas/InvariantDecimal'}
+    InvariantDecimal:
+      type: string
+      maxLength: 96
+      pattern: '^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]{1,2})?$'
+    BusinessInvariantResult:
+      type: object
+      additionalProperties: false
+      description: SATISFIED is diagnostic and never authorizes production. UNKNOWN dominates any mixed result containing unavailable observations.
+      required: [schema, scope, behavior_digest, policy_digest, decision, checks]
+      properties:
+        schema: {type: string, const: safepatch.invariant-result.v1}
+        scope: {$ref: '#/components/schemas/AgentScope'}
+        behavior_digest: {type: string}
+        policy_digest: {type: string}
+        decision: {type: string, enum: [SATISFIED, VIOLATED, UNKNOWN]}
+        checks:
+          type: array
+          maxItems: 4096
+          items:
+            type: object
+            additionalProperties: false
+            required: [rule_id, case_id, decision]
+            properties:
+              rule_id: {type: string}
+              case_id: {type: string}
+              decision: {type: string, enum: [SATISFIED, VIOLATED, UNKNOWN]}
+    PassportDigest:
+      type: string
+      pattern: '^[a-f0-9]{64}$'
+    PassportReference:
+      type: object
+      additionalProperties: false
+      required: [digest, media_type]
+      description: Tenant-scoped immutable bytes, never a URL or filesystem path. Null references are unknown.
+      properties:
+        digest:
+          $ref: '#/components/schemas/PassportDigest'
+        media_type:
+          type: string
+          minLength: 3
+          maxLength: 128
+          pattern: '^[a-z0-9+.\-]+/[a-z0-9+.\-]+$'
+    PassportSignature:
+      type: object
+      additionalProperties: false
+      required: [algorithm, key_id, value]
+      properties:
+        algorithm:
+          type: string
+          const: Ed25519
+        key_id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$'
+        value:
+          type: string
+          contentEncoding: base64
+          minLength: 88
+          maxLength: 88
+          description: Standard padded base64 of the 64-byte Ed25519 signature.
+    OnboardingState:
+      type: object
+      required: [organization_id, revision, edition, edition_version_id, installation_id, repositories, policy_id, proof_id]
+      properties:
+        organization_id: {type: string}
+        revision: {type: integer, minimum: 1}
+        edition: {type: string}
+        edition_version_id: {type: string}
+        installation_id: {type: integer}
+        repositories:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/OnboardingRepository'}
+        policy_id: {type: string}
+        proof_id: {type: string}
+    OnboardingRepository:
+      type: object
+      required: [id, full_name, private]
+      properties:
+        id: {type: string}
+        full_name: {type: string}
+        private: {type: boolean}
+    FirstProof:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [PENDING, QUEUED, RUNNING, PASS, FAIL, UNKNOWN, ERROR]}
+    ProductCatalog:
+      type: object
+      additionalProperties: false
+      required: [release, editions]
+      properties:
+        release:
+          type: string
+        editions:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/PricingEdition'
+    PricingEdition:
+      type: object
+      additionalProperties: false
+      required: [key, name, description, edition_version_id, price_label, price_note, trial_days, trial_note, action, features]
+      properties:
+        key:
+          type: string
+          enum: [community, developer, team, business, enterprise]
+        name:
+          type: string
+        description:
+          type: string
+        edition_version_id:
+          type: string
+        price_label:
+          type: string
+        price_note:
+          type: string
+        trial_days:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 365
+        trial_note:
+          type: string
+        action:
+          type: object
+          additionalProperties: false
+          required: [label, href, unavailable_message]
+          properties:
+            label:
+              type: string
+              enum: [Download, Start Trial, Contact Sales]
+            href:
+              type: string
+              description: Validated HTTPS destination, fixed local onboarding path, or sales mailto address; empty when unavailable. Trial links select intent and do not activate a trial.
+            unavailable_message:
+              type: string
+        features:
+          type: array
+          maxItems: 4096
+          items:
+            $ref: '#/components/schemas/PricingFeature'
+    PricingFeature:
+      type: object
+      additionalProperties: false
+      required: [key, name, description, category, availability, limit_value]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        availability:
+          type: string
+          enum: [SDK, FUTURE]
+        limit_value:
+          type: [integer, 'null']
+          minimum: 0

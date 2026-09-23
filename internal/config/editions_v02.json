@@ -1,0 +1,1253 @@
+{
+  "release": "0.2.0",
+  "limit_profile_status": "PROVISIONAL",
+  "editions": [
+    {
+      "bundle": {
+        "version": {
+          "edition_version_id": "community-2026-v3",
+          "edition_key": "community",
+          "created_at": "2026-09-06T00:00:00Z"
+        },
+        "features": [
+          {
+            "edition_version_id": "community-2026-v3",
+            "feature_id": "feat_0001",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "community-2026-v3",
+            "feature_id": "feat_0002",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "community-2026-v3",
+            "feature_id": "feat_0005",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "community-2026-v3",
+            "feature_id": "feat_0008",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "community-2026-v3",
+            "feature_id": "feat_0039",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "community-2026-v3",
+            "feature_id": "feat_0040",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          }
+        ]
+      },
+      "limits": [
+        {
+          "key": "repositories",
+          "state": "INTEGER",
+          "value": 3
+        },
+        {
+          "key": "developers",
+          "state": "INTEGER",
+          "value": 1
+        },
+        {
+          "key": "proof_credits_monthly",
+          "state": "DISABLED",
+          "value": 0
+        },
+        {
+          "key": "verification_concurrency",
+          "state": "INTEGER",
+          "value": 1
+        },
+        {
+          "key": "retention_days",
+          "state": "INTEGER",
+          "value": 7
+        },
+        {
+          "key": "artifact_storage_bytes",
+          "state": "INTEGER",
+          "value": 1073741824
+        },
+        {
+          "key": "replay_requests_monthly",
+          "state": "DISABLED",
+          "value": 0
+        },
+        {
+          "key": "fuzz_seconds_monthly",
+          "state": "INTEGER",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "bundle": {
+        "version": {
+          "edition_version_id": "developer-2026-v2",
+          "edition_key": "developer",
+          "created_at": "2026-09-06T00:00:00Z"
+        },
+        "features": [
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0001",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0002",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0005",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0006",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0008",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0011",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0030",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0031",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0032",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0039",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0040",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "developer-2026-v2",
+            "feature_id": "feat_0041",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          }
+        ]
+      },
+      "limits": [
+        {
+          "key": "repositories",
+          "state": "INTEGER",
+          "value": 10
+        },
+        {
+          "key": "developers",
+          "state": "INTEGER",
+          "value": 1
+        },
+        {
+          "key": "proof_credits_monthly",
+          "state": "INTEGER",
+          "value": 1000
+        },
+        {
+          "key": "verification_concurrency",
+          "state": "INTEGER",
+          "value": 2
+        },
+        {
+          "key": "retention_days",
+          "state": "INTEGER",
+          "value": 30
+        },
+        {
+          "key": "artifact_storage_bytes",
+          "state": "INTEGER",
+          "value": 10737418240
+        },
+        {
+          "key": "replay_requests_monthly",
+          "state": "DISABLED",
+          "value": 0
+        },
+        {
+          "key": "fuzz_seconds_monthly",
+          "state": "INTEGER",
+          "value": 600
+        }
+      ]
+    },
+    {
+      "bundle": {
+        "version": {
+          "edition_version_id": "team-2026-v2",
+          "edition_key": "team",
+          "created_at": "2026-09-06T00:00:00Z"
+        },
+        "features": [
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0001",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0002",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0005",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0006",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0008",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0009",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0011",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0012",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0030",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0031",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0032",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0033",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0034",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0035",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0036",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0037",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0039",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0040",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "team-2026-v2",
+            "feature_id": "feat_0041",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          }
+        ]
+      },
+      "limits": [
+        {
+          "key": "repositories",
+          "state": "INTEGER",
+          "value": 50
+        },
+        {
+          "key": "developers",
+          "state": "INTEGER",
+          "value": 10
+        },
+        {
+          "key": "proof_credits_monthly",
+          "state": "INTEGER",
+          "value": 10000
+        },
+        {
+          "key": "verification_concurrency",
+          "state": "INTEGER",
+          "value": 4
+        },
+        {
+          "key": "retention_days",
+          "state": "INTEGER",
+          "value": 90
+        },
+        {
+          "key": "artifact_storage_bytes",
+          "state": "INTEGER",
+          "value": 107374182400
+        },
+        {
+          "key": "replay_requests_monthly",
+          "state": "DISABLED",
+          "value": 0
+        },
+        {
+          "key": "fuzz_seconds_monthly",
+          "state": "INTEGER",
+          "value": 3600
+        }
+      ]
+    },
+    {
+      "bundle": {
+        "version": {
+          "edition_version_id": "business-2026-v2",
+          "edition_key": "business",
+          "created_at": "2026-09-06T00:00:00Z"
+        },
+        "features": [
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0001",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0002",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0005",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0006",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0008",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0009",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0010",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0011",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0012",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0014",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0015",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0016",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0018",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0019",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0030",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0031",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0032",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0033",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0034",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0035",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0036",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0037",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0038",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0039",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0040",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "business-2026-v2",
+            "feature_id": "feat_0041",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          }
+        ]
+      },
+      "limits": [
+        {
+          "key": "repositories",
+          "state": "INTEGER",
+          "value": 200
+        },
+        {
+          "key": "developers",
+          "state": "INTEGER",
+          "value": 50
+        },
+        {
+          "key": "proof_credits_monthly",
+          "state": "INTEGER",
+          "value": 50000
+        },
+        {
+          "key": "verification_concurrency",
+          "state": "INTEGER",
+          "value": 16
+        },
+        {
+          "key": "retention_days",
+          "state": "INTEGER",
+          "value": 365
+        },
+        {
+          "key": "artifact_storage_bytes",
+          "state": "INTEGER",
+          "value": 1099511627776
+        },
+        {
+          "key": "replay_requests_monthly",
+          "state": "DISABLED",
+          "value": 0
+        },
+        {
+          "key": "fuzz_seconds_monthly",
+          "state": "INTEGER",
+          "value": 14400
+        }
+      ]
+    },
+    {
+      "bundle": {
+        "version": {
+          "edition_version_id": "enterprise-2026-v2",
+          "edition_key": "enterprise",
+          "created_at": "2026-09-06T00:00:00Z"
+        },
+        "features": [
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0001",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0002",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0005",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0006",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0008",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0009",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0010",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0011",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0012",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0013",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0014",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0015",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0016",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0018",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0019",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0022",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0023",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0024",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0025",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0026",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE",
+              "scope": "foundations"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0027",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE",
+              "scope": "foundations"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0028",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0029",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0030",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0031",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0032",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0033",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0034",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0035",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0036",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0037",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0038",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "FUTURE"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0039",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0040",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          },
+          {
+            "edition_version_id": "enterprise-2026-v2",
+            "feature_id": "feat_0041",
+            "enabled": true,
+            "limit_value": null,
+            "configuration_json": {
+              "release": "0.2.0",
+              "availability": "SDK"
+            }
+          }
+        ]
+      },
+      "limits": [
+        {
+          "key": "repositories",
+          "state": "INTEGER",
+          "value": 200
+        },
+        {
+          "key": "developers",
+          "state": "INTEGER",
+          "value": 50
+        },
+        {
+          "key": "proof_credits_monthly",
+          "state": "INTEGER",
+          "value": 50000
+        },
+        {
+          "key": "verification_concurrency",
+          "state": "INTEGER",
+          "value": 16
+        },
+        {
+          "key": "retention_days",
+          "state": "INTEGER",
+          "value": 365
+        },
+        {
+          "key": "artifact_storage_bytes",
+          "state": "INTEGER",
+          "value": 1099511627776
+        },
+        {
+          "key": "replay_requests_monthly",
+          "state": "DISABLED",
+          "value": 0
+        },
+        {
+          "key": "fuzz_seconds_monthly",
+          "state": "INTEGER",
+          "value": 14400
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "schema": "safepatch.downloads.v1",
+  "region": "us-east-1",
+  "endpoint": "https://s3.us-east-1.amazonaws.com",
+  "bucket": "replace-with-private-release-bucket",
+  "artifacts": [
+    {
+      "id": "cli_1_5_2_linux_amd64",
+      "version": "1.5.2",
+      "channel": "stable",
+      "kind": "cli",
+      "filename": "safepatch_1.5.2_linux_amd64.zip",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "bytes": 123,
+      "available_until": "2030-01-01T00:00:00Z"
+    },
+    {
+      "id": "self_host_1_5_2",
+      "version": "1.5.2",
+      "channel": "stable",
+      "kind": "self_host_bundle",
+      "filename": "safepatch_self_host_1.5.2.zip",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "bytes": 123,
+      "available_until": "2030-01-01T00:00:00Z"
+    },
+    {
+      "id": "airgap_1_5_2",
+      "version": "1.5.2",
+      "channel": "stable",
+      "kind": "airgap_bundle",
+      "filename": "safepatch_airgap_1.5.2.zip",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "bytes": 123,
+      "available_until": "2030-01-01T00:00:00Z"
+    },
+    {
+      "id": "lts_1_5_2_linux_amd64",
+      "version": "1.5.2",
+      "channel": "lts",
+      "kind": "public_asset",
+      "filename": "safepatch_1.5.2_lts_linux_amd64.zip",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "bytes": 123,
+      "available_until": "2030-01-01T00:00:00Z"
+    }
+  ]
+}

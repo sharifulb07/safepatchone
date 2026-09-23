@@ -1,0 +1,27 @@
+{
+  "name": "safepatch-web",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "catalog": "node scripts/catalog.mjs",
+    "predev": "npm run catalog",
+    "dev": "next dev --hostname 127.0.0.1",
+    "prebuild": "npm run catalog",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "7.0.2"
+  }
+}
