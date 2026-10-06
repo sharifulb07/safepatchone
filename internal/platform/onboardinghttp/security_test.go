@@ -18,6 +18,33 @@ type testSessions struct {
 	err   error
 }
 
+func TestDuplicateAuthenticationCookiesFailClosed(t *testing.T) {
+	for _, name := range []string{sessionCookie, oauthCookie, returnCookie} {
+		for _, values := range [][]string{{"opaque", "forged"}, {"forged", "opaque"}, {"opaque", "opaque"}} {
+			r := httptest.NewRequest("GET", "/", nil)
+			for _, value := range values {
+				r.AddCookie(&http.Cookie{Name: name, Value: value})
+			}
+			if token(r, name) != "" {
+				t.Fatalf("accepted ambiguous %s", name)
+			}
+		}
+	}
+}
+
+func TestOAuthReturnDestinationCannotLeaveTrustedFlows(t *testing.T) {
+	for _, raw := range []string{"https://attacker.example", "//attacker.example", "/\\attacker.example", "/onboarding?edition=enterprise&paid=true", "/onboarding?edition=team&edition=business", "/onboarding?edition=unknown", "/downloads?url=https://attacker.example", "/onboarding#fragment", "/v1/onboarding/logout"} {
+		if loginDestination(raw) != "" {
+			t.Fatal("unsafe destination accepted", raw)
+		}
+	}
+	for _, raw := range []string{"/onboarding", "/downloads", "/onboarding?edition=team"} {
+		if loginDestination(raw) != raw {
+			t.Fatal("lost valid preference", raw)
+		}
+	}
+}
+
 func (s *testSessions) begin(context.Context) (string, string, string, error) {
 	return "state", "browser", "challenge", nil
 }

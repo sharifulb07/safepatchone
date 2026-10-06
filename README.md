@@ -1,5 +1,14 @@
 # SafePatch
 
+See the [2026-10-03 review](docs/releases/2026-10-03-review.md) for the latest
+security upgrade, authentication and shutdown fixes, validation, and release gates.
+On Windows, run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify.ps1` for reproducible local checks.
+Use `-Postgres` with a disposable database to also run live migration acceptance.
+
+See the [2026-09-27 review and deployment guide](docs/releases/2026-09-27-review.md)
+for the landing/account/pricing/download flows, security fixes, validation, and
+remaining production release blockers. Use the Go security patch in `go.mod`.
+
 The [standard release pipeline](docs/releases.md) builds all six shared Go commands
 for Linux, macOS and Windows, plus signed container images, SBOMs, checksums and
 provenance. One artifact set serves all five editions through runtime entitlements.
@@ -12,7 +21,7 @@ Organization onboarding is available at `/onboarding`. See the
 [onboarding setup and worker boundary](docs/architecture/onboarding.md) for
 GitHub login, the Go API, authoritative billing/trials and first-proof submission.
 
-SafePatch is a software-change verification and trust platform being developed in Go. This checkout contains shared core models, entitlement and quota infrastructure, command shells, verification runner adapters, tests, and design documents. End-to-end verification and production server/worker composition are **not implemented yet**.
+SafePatch is a software-change verification and trust platform being developed in Go. This checkout contains shared core models, entitlement and quota infrastructure, an organization account API, command shells, verification runner adapters, tests, and design documents. End-to-end verification and production worker composition are **not implemented yet**.
 
 The [v0.1 release preparation](docs/releases/v0.1.md) records the shared developer-preview scope and release validation. The [v0.1 edition capability matrix](docs/editions/v0.1-feature-matrix.md) covers all five editions, distinguishes implemented SDK code from product workflows, and marks later capabilities **FUTURE**.
 
@@ -72,6 +81,10 @@ The [organization-first SaaS entities](docs/architecture/organization-entities.m
 
 The [BillingProvider contract and Stripe adapter](docs/architecture/billing-provider.md) support organization checkout, subscription reads, customer portal sessions and verified webhook normalization. The application boundary enforces `billing.manage`; the core has no Stripe dependency.
 
+[Paddle Billing setup](docs/architecture/paddle-setup.md) adds server-created checkout,
+verified subscription synchronization, and customer billing management to the same
+entitlement system. Follow the guide for manual dashboard settings and credentials.
+
 [Stripe subscription synchronization](docs/architecture/stripe-subscriptions.md) adds Developer, Team and Business offer configuration, durable idempotent webhook receipts, transactional subscription/audit updates, and a shared HTTP handler. Runtime entitlements derive from PostgreSQL state and SafePatch's sealed edition bundles, with finite paid/trial boundaries and separate actor permissions. Enterprise remains contract-managed. Provisioning credentials/customers, live PostgreSQL/Stripe validation, mounting the handler and scheduling recovery remain deployment responsibilities.
 
 [Organization trials](docs/architecture/organization-trials.md) offer Developer and Team for 14 days and Business for a configured duration. Atomic organization-owned trial records publish finite grants through the existing entitlement system. Expiration automatically falls back to Community and other applicable paid sources, without deleting data or requiring a scheduler. Trial management requires organization membership and `billing.manage`.
@@ -90,12 +103,12 @@ go build ./cmd/...
 go run ./cmd/safepatch --help
 ```
 
-All six commands support `--help`, `-h`, and `help`. `safepatch entitlement show` prints the offline Community bundle and exits 0. With no arguments the command shells report that the operation is not implemented and exit 1. `safepatch verify` also exits 1; it cannot report a successful verification. Other unsupported arguments exit 2. No command opens a listener, executes repository code, or contacts an external service.
+All six commands support `--help`, `-h`, and `help`. Running `safepatch` without arguments (or `go run main.go` from `cmd/safepatch`) displays help and exits 0. `safepatch entitlement show` prints the offline Community bundle and exits 0. The other command shells report that the operation is not implemented when started without arguments and exit 1. `safepatch verify` also exits 1; it cannot report a successful verification. Other unsupported arguments exit 2. `safepatch-api serve` starts the account API with trusted PostgreSQL, NATS, GitHub and optional billing/download configuration; see the deployment guides above.
 
 ## Layout and boundaries
 
 See [repository structure](docs/architecture/repository-structure.md) for the requested directory map, dependency policy, and test details. [One-codebase editions](docs/architecture/one-codebase-editions.md), [threat model](docs/security/threat-model.md), and [version/edition matrix](docs/roadmap/version-edition-matrix.md) describe the product requirements and remaining work.
 
-There is one root Go module. `cmd/` composes the shared `internal/application` package, which depends inward on `internal/domain`. Other internal packages declare their intended boundaries without speculative feature implementations. Language/framework/provider integrations live outside core domain code. There are no edition directories. The Next.js marketing site serves pricing and public catalog metadata; the Go command shells still do not start backend listeners.
+There is one root Go module. `cmd/` composes the shared `internal/application` package, which depends inward on `internal/domain`. Other internal packages declare their intended boundaries without speculative feature implementations. Language/framework/provider integrations live outside core domain code. There are no edition directories. The Next.js site serves public pages and account/download interfaces backed by the Go account API.
 
-The checkout currently inherits the parent `Documents` Git root. This milestone does not initialize another repository or change parent Git state. Keep Git operations scoped to SafePatch until the repository location is established.
+This checkout has its own Git root. Keep Git operations scoped to SafePatch and preserve existing working-tree changes during reviews.

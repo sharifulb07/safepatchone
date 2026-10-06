@@ -3,10 +3,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"safepatch/internal/config"
+	"safepatch/internal/domain/edition"
+	"safepatch/internal/domain/jsonobject"
 	"strconv"
 )
 
@@ -19,7 +22,19 @@ func main() {
 			fail()
 		}
 	}
-	c, err := config.PublicPricing(config.PricingOptions{DownloadURL: os.Getenv("SAFEPATCH_DOWNLOAD_URL"), TrialURL: os.Getenv("SAFEPATCH_TRIAL_URL"), SalesURL: os.Getenv("SAFEPATCH_SALES_URL"), BusinessTrialDays: days})
+	var prices map[edition.Key]config.PublishedPrice
+	if raw := os.Getenv("SAFEPATCH_PUBLIC_PRICES"); raw != "" {
+		checked, err := jsonobject.Normalize([]byte(raw), 4096)
+		if err != nil {
+			fail()
+		}
+		decoder := json.NewDecoder(bytes.NewReader(checked))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&prices) != nil {
+			fail()
+		}
+	}
+	c, err := config.PublicPricing(config.PricingOptions{DownloadURL: os.Getenv("SAFEPATCH_DOWNLOAD_URL"), TrialURL: os.Getenv("SAFEPATCH_TRIAL_URL"), SalesURL: os.Getenv("SAFEPATCH_SALES_URL"), BusinessTrialDays: days, Prices: prices})
 	if err != nil {
 		fail()
 	}

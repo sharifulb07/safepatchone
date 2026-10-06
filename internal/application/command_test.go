@@ -25,6 +25,12 @@ func TestCommandShells(t *testing.T) {
 				}
 			}
 			var out, errOut bytes.Buffer
+			if command == "safepatch" {
+				if code := application.Run(command, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), "Usage: safepatch") || errOut.Len() != 0 {
+					t.Fatalf("CLI startup must show help: stdout=%q stderr=%q", out.String(), errOut.String())
+				}
+				return
+			}
 			if code := application.Run(command, nil, &out, &errOut); code != 1 {
 				t.Fatalf("unimplemented command exit = %d", code)
 			}
@@ -76,7 +82,28 @@ func TestOutputFailureDoesNotSucceed(t *testing.T) {
 		t.Fatalf("failed help output exit = %d", code)
 	}
 	var out bytes.Buffer
-	if code := application.Run("safepatch", nil, &out, failingWriter{}); code != 1 {
+	if code := application.Run("safepatch", []string{"verify"}, &out, failingWriter{}); code != 1 {
 		t.Fatalf("unavailable operation with failed stderr exit = %d", code)
+	}
+}
+
+func TestCLIStartupMatchesExplicitHelp(t *testing.T) {
+	for _, jsonMode := range []bool{false, true} {
+		var args []string
+		help := []string{"--help"}
+		if jsonMode {
+			args = []string{"--json"}
+			help = append(help, "--json")
+		}
+		var startupOut, helpOut, stderr bytes.Buffer
+		if code := application.Run("safepatch", args, &startupOut, &stderr); code != 0 || stderr.Len() != 0 {
+			t.Fatalf("startup failed: exit=%d stderr=%q", code, stderr.String())
+		}
+		if code := application.Run("safepatch", help, &helpOut, &stderr); code != 0 || startupOut.String() != helpOut.String() {
+			t.Fatal("default startup differs from explicit help")
+		}
+		if code := application.Run("safepatch", args, failingWriter{}, &stderr); code != 1 {
+			t.Fatal("startup output failure reported success")
+		}
 	}
 }

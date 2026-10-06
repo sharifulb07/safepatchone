@@ -1,0 +1,92 @@
+name: SafePatch verification
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@fba3fb4ead8c8e09a06f1d32ae5436e5818eff15
+        with:
+          go-version-file: go.mod
+      - run: go mod verify
+      - run: go test ./... -count=1
+      - run: go test -race ./... -count=1
+      - run: go vet ./...
+      - if: runner.os == 'Linux'
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - run: go test -race ./internal/platform/downloads -run TestEveryEditionProtectedDownloadBoundaries -count=100
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: safepatch_test
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: safepatch_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U safepatch_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SAFEPATCH_POSTGRES_MIGRATION_TEST: '1'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: safepatch_test
+      PGPASSWORD: disposable_ci_only
+      PGDATABASE: safepatch_test
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@fba3fb4ead8c8e09a06f1d32ae5436e5818eff15
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: go test ./internal/platform/migrationtest -run TestPostgres -count=1 -v
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@fba3fb4ead8c8e09a06f1d32ae5436e5818eff15
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: failure()
+        with:
+          name: browser-failures
+          path: web/test-results/
+          retention-days: 7

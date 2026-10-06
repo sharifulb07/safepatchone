@@ -25,6 +25,40 @@ import (
 const sessionCookie = "__Host-safepatch_session"
 const csrfCookie = "__Host-safepatch_csrf"
 const oauthCookie = "__Host-safepatch_oauth"
+const returnCookie = "__Host-safepatch_return"
+
+// Only local onboarding preferences can survive OAuth. Neither a destination
+// nor an edition selection grants an entitlement or authorizes a mutation.
+func loginDestination(raw string) string {
+	if raw == "" {
+		return "/onboarding"
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.IsAbs() || u.Host != "" || u.User != nil || u.Fragment != "" {
+		return ""
+	}
+	if u.Path == "/downloads" && u.RawQuery == "" {
+		return "/downloads"
+	}
+	if u.Path != "/onboarding" {
+		return ""
+	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil || len(query) > 1 {
+		return ""
+	}
+	if len(query) == 0 {
+		return "/onboarding"
+	}
+	values := query["edition"]
+	if len(values) != 1 {
+		return ""
+	}
+	if _, err := edition.Lookup(edition.Key(values[0])); err != nil {
+		return ""
+	}
+	return "/onboarding?" + url.Values{"edition": values}.Encode()
+}
 
 type authSessions interface {
 	begin(context.Context) (string, string, string, error)
@@ -81,11 +115,11 @@ func cookie(w http.ResponseWriter, name, value string, httpOnly bool, expires ti
 	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/", Secure: true, HttpOnly: httpOnly, SameSite: http.SameSiteLaxMode, Expires: expires})
 }
 func token(r *http.Request, name string) string {
-	c, err := r.Cookie(name)
-	if err != nil {
+	cookies := r.CookiesNamed(name)
+	if len(cookies) != 1 {
 		return ""
 	}
-	return c.Value
+	return cookies[0].Value
 }
 func output(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -149,12 +183,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/v1/auth/github/start" && r.Method == "GET" {
+		destination := loginDestination(r.URL.Query().Get("return_to"))
+		if destination == "" {
+			failure(w, flow.ErrInvalid)
+			return
+		}
 		state, browser, challenge, err := h.sessions.begin(ctx)
 		if err != nil {
 			failure(w, err)
 			return
 		}
 		cookie(w, oauthCookie, browser, true, time.Now().Add(10*time.Minute))
+		cookie(w, returnCookie, destination, true, time.Now().Add(10*time.Minute))
 		http.Redirect(w, r, h.github.AuthorizeURL(state, challenge), http.StatusSeeOther)
 		return
 	}
@@ -172,7 +212,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		cookie(w, sessionCookie, session, true, until)
 		cookie(w, csrfCookie, csrf, false, until)
-		http.Redirect(w, r, h.origin+"/onboarding", http.StatusSeeOther)
+		destination := loginDestination(token(r, returnCookie))
+		if destination == "" {
+			destination = "/onboarding"
+		}
+		cookie(w, returnCookie, "", true, time.Unix(1, 0))
+		http.Redirect(w, r, h.origin+destination, http.StatusSeeOther)
 		return
 	}
 	mutating := r.Method == "POST"

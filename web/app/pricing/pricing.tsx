@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { CatalogEdition, CatalogFeature, ProductCatalog } from "../../lib/catalog";
+import { SiteHeader } from "../components/site";
 
 function Check({ className = "" }: { className?: string }) {
   return <svg className={className} aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
@@ -34,12 +35,7 @@ export default function Pricing({ catalog }: { catalog: ProductCatalog }) {
   }
 
   return <>
-    <a className="skip" href="#main">Skip to content</a>
-    <header className="header"><div className="nav wrap">
-      <a href="/pricing" className="brand" aria-label="SafePatch pricing"><span className="brand-mark"><Check /></span>SafePatch<span className="brand-dot">.</span></a>
-      <nav aria-label="Main navigation"><a href="#editions">Editions</a><a href="#compare">Compare features</a><a href="#questions">Questions</a></nav>
-      <a className="nav-cta" href="#editions">Find your plan <span aria-hidden="true">→</span></a>
-    </div></header>
+    <SiteHeader />
 
     <main id="main">
       <section className="hero wrap" aria-labelledby="pricing-title">

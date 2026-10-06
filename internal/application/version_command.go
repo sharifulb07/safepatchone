@@ -37,7 +37,11 @@ func (localVersionMetadata) VersionMetadata(ctx context.Context) (VersionMetadat
 		return VersionMetadata{}, err
 	}
 	report, err := p.Inspect(ctx)
-	return VersionMetadata{report.Edition, report.BundleVersion, release.Stable, report.Source}, err
+	if err != nil {
+		return VersionMetadata{}, err
+	}
+	channel, err := release.ParseChannel(BuildChannel)
+	return VersionMetadata{report.Edition, report.BundleVersion, channel, report.Source}, err
 }
 
 type versionInfo struct {

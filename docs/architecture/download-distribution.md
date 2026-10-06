@@ -24,6 +24,9 @@ an eligible public kind and no organization binding.
 ## HTTP flow
 
 - `GET /v1/downloads/public` lists only unexpired public metadata.
+- `GET /v1/organizations/{organization}/downloads` lists currently eligible private
+  metadata after authenticating membership and organization management permission.
+  It never signs objects; source failures are not reported as an empty success.
 - `GET /v1/downloads/public/{artifact}` returns an anonymous short-lived URL for
   an explicitly public artifact. Unknown, expired and protected IDs return 404.
 - `POST /v1/organizations/{organization}/downloads/{artifact}` authenticates the
@@ -33,10 +36,12 @@ an eligible public kind and no organization binding.
 
 Authentication reuses `Sessions.Authenticate`. Send a SafePatch session through
 `Authorization: Bearer ...`, supplied securely by the existing login integration;
-GitHub access tokens, Stripe credentials, cookies and client-supplied identity
-claims are not accepted. Browser integrations should call through their trusted
-authenticated backend; this milestone does not add cross-domain cookie sharing,
-session export, a new login system or a download dashboard. Duplicate Authorization
+GitHub access tokens, Stripe credentials and client identity claims are not
+accepted. The same-origin `/downloads` page uses the HttpOnly login cookie;
+`BrowserDownloads` authenticates it and verifies exact Origin and session-bound
+CSRF on POST before adapting it to the existing bearer handler. Requests with
+both a browser session and Authorization are rejected. No token is exported to
+JavaScript and no cross-domain cookie sharing is added. Duplicate Authorization
 headers, malformed IDs and query/body storage overrides are rejected.
 
 A successful response contains `url`, `expires_at`, `filename`, `sha256` and

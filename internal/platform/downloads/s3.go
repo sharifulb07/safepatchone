@@ -4,12 +4,14 @@ package downloads
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"safepatch/internal/application"
 	"safepatch/internal/domain/release"
@@ -44,9 +46,16 @@ func (s *S3Signer) Sign(ctx context.Context, a release.Artifact, deadline time.T
 	if err != nil || credentials.AccessKeyID == "" || credentials.SecretAccessKey == "" {
 		return application.DownloadLink{}, application.ErrDownloadDenied
 	}
-	ttl := time.Until(deadline).Truncate(time.Second)
+	// Use one signing instant for both expiry arithmetic and the signature.
+	// Letting SDK middleware sample a later second can extend the URL beyond
+	// the caller's deadline and intermittently fail the application guard.
+	issuedAt := time.Now().UTC().Truncate(time.Second)
+	if a.AvailableUntil.Before(deadline) {
+		deadline = a.AvailableUntil
+	}
+	ttl := deadline.Sub(issuedAt).Truncate(time.Second)
 	if credentials.CanExpire {
-		remaining := time.Until(credentials.Expires).Truncate(time.Second)
+		remaining := credentials.Expires.Sub(issuedAt).Truncate(time.Second)
 		if remaining < ttl {
 			ttl = remaining
 		}
@@ -65,7 +74,9 @@ func (s *S3Signer) Sign(ctx context.Context, a release.Artifact, deadline time.T
 	if a.ObjectVersion != "" {
 		input.VersionId = aws.String(a.ObjectVersion)
 	}
-	result, err := s3.NewPresignClient(client).PresignGetObject(ctx, input, func(o *s3.PresignOptions) { o.Expires = ttl })
+	result, err := s3.NewPresignClient(client, func(o *s3.PresignOptions) {
+		o.Presigner = fixedTimePresigner{v4.NewSigner(), issuedAt}
+	}).PresignGetObject(ctx, input, func(o *s3.PresignOptions) { o.Expires = ttl })
 	if err != nil {
 		return application.DownloadLink{}, application.ErrDownloadDenied
 	}
@@ -76,8 +87,18 @@ func (s *S3Signer) Sign(ctx context.Context, a release.Artifact, deadline time.T
 	}
 	issued, err := time.Parse("20060102T150405Z", u.Query().Get("X-Amz-Date"))
 	seconds, e := strconv.Atoi(u.Query().Get("X-Amz-Expires"))
-	if err != nil || e != nil || seconds < 1 || time.Duration(seconds)*time.Second > ttl {
+	expires := issued.Add(time.Duration(seconds) * time.Second)
+	if err != nil || e != nil || seconds < 1 || time.Duration(seconds)*time.Second > ttl || !expires.After(time.Now()) || expires.After(deadline) || (credentials.CanExpire && expires.After(credentials.Expires)) || ctx.Err() != nil {
 		return application.DownloadLink{}, application.ErrDownloadDenied
 	}
-	return application.DownloadLink{URL: result.URL, ExpiresAt: issued.Add(time.Duration(seconds) * time.Second)}, nil
+	return application.DownloadLink{URL: result.URL, ExpiresAt: expires}, nil
+}
+
+type fixedTimePresigner struct {
+	*v4.Signer
+	issuedAt time.Time
+}
+
+func (s fixedTimePresigner) PresignHTTP(ctx context.Context, credentials aws.Credentials, r *http.Request, payloadHash, service, region string, _ time.Time, options ...func(*v4.SignerOptions)) (string, http.Header, error) {
+	return s.Signer.PresignHTTP(ctx, credentials, r, payloadHash, service, region, s.issuedAt, options...)
 }

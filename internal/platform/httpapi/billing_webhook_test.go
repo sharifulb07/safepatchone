@@ -12,6 +12,35 @@ import (
 type webhookFunc func(context.Context, billing.WebhookDelivery) error
 
 func (f webhookFunc) Handle(c context.Context, d billing.WebhookDelivery) error { return f(c, d) }
+func TestPaddleWebhookUsesOnlyPaddleSignature(t *testing.T) {
+	calls := 0
+	h, err := NewBillingWebhookHandlerWithSignature(webhookFunc(func(_ context.Context, d billing.WebhookDelivery) error {
+		calls++
+		if d.Signature != "paddle-signature" || string(d.Payload) != " { } " {
+			t.Fatal(d)
+		}
+		return nil
+	}), "Paddle-Signature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, header := range []string{"Stripe-Signature", "Paddle-Signature"} {
+		r := httptest.NewRequest("POST", "/v1/billing/paddle/webhook", strings.NewReader(" { } "))
+		r.Header.Set(header, "paddle-signature")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		want := 400
+		if header == "Paddle-Signature" {
+			want = 204
+		}
+		if w.Code != want {
+			t.Fatal(w.Code)
+		}
+	}
+	if calls != 1 {
+		t.Fatal(calls)
+	}
+}
 func TestBillingWebhookIngressStatusAndBodyBoundaries(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

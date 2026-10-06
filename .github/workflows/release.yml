@@ -14,7 +14,10 @@ defaults:
     shell: bash
 
 jobs:
+  verification:
+    uses: ./.github/workflows/verify.yml
   test:
+    needs: verification
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -41,7 +44,7 @@ jobs:
           go test ./...
           go test -race ./...
           go vet ./...
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -shellcheck= -pyflakes= .github/workflows/release.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -shellcheck= -pyflakes= .github/workflows/release.yml .github/workflows/verify.yml
 
   build:
     needs: test

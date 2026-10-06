@@ -38,10 +38,11 @@ func RunWithVersionMetadata(command string, args []string, stdout, stderr io.Wri
 		return versionCommand(context.Background(), provider, out)
 	}
 
-	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+	if (command == "safepatch" && len(args) == 0) || (len(args) == 1 && helpArgument(args[0])) {
 		usage := "[--help] | version [--json]"
 		if command == "safepatch" {
 			usage = "[--help] | version | entitlement show | entitlement explain <feature> | edition | whoami [--json]"
+			return out.help(fmt.Sprintf("Usage: %s %s\nInspect local version, edition, entitlements and identity.\nVerification execution is not implemented yet.\n", command, usage))
 		}
 		if command == "safepatch-api" {
 			return out.help("Usage: safepatch-api [--help] | version [--json] | serve\nServe organization onboarding with trusted PostgreSQL, GitHub App and NATS configuration.\n")

@@ -9,4 +9,4 @@ uses `Dockerfile.release` for every container role. Images contain the same Linu
 binaries as release ZIPs and resolve edition capabilities at runtime. Several
 entrypoints remain command shells; see the release guide before deployment.
 
-Deployment configuration for shared process roles belongs here. PostgreSQL, NATS JetStream, S3-compatible storage, and OpenTelemetry adapters are future work. Configuration and licensing select capabilities; edition-specific source copies or builds are forbidden.
+Deployment configuration for shared process roles belongs here. PostgreSQL, NATS JetStream and S3 adapters exist, but live infrastructure acceptance and the verification worker composition remain release gates. Follow the [current review](../docs/releases/2026-10-03-review.md), [onboarding guide](../docs/architecture/onboarding.md), and [Paddle guide](../docs/architecture/paddle-setup.md) before configuring the account service. Configuration and licensing select capabilities; edition-specific source copies or builds are forbidden.

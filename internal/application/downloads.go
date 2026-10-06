@@ -89,32 +89,80 @@ func (s *Downloads) Public(ctx context.Context, id string) (DownloadLink, error)
 	return s.sign(ctx, a)
 }
 func (s *Downloads) Protected(ctx context.Context, actor authorization.Principal, org, id string) (DownloadLink, error) {
-	if s == nil || ctx == nil || ctx.Err() != nil || actor.Validate() != nil || !tenant.ValidID(org) {
+	a, err := s.authorize(ctx, actor, org, id)
+	// Issuance preserves the existing opaque denial contract for all access
+	// failures. The catalog distinguishes outages from an empty entitlement set.
+	if err != nil {
 		return DownloadLink{}, ErrDownloadDenied
+	}
+	return s.sign(ctx, a)
+}
+
+// OrganizationCatalog exposes only currently authorized publication metadata.
+// Issuance rechecks access, so a catalog response never grants download rights.
+func (s *Downloads) OrganizationCatalog(ctx context.Context, actor authorization.Principal, org string) ([]PublicDownload, error) {
+	if s == nil || ctx == nil || ctx.Err() != nil || actor.Validate() != nil || !tenant.ValidID(org) {
+		return nil, ErrDownloadDenied
 	}
 	scope := tenant.Scope{OrganizationID: org, ResourceID: org}
 	resolved, err := s.access.Tenants.Resolve(ctx, actor, scope)
 	if err != nil || resolved != scope {
-		return DownloadLink{}, ErrDownloadDenied
+		return nil, ErrDownloadDenied
+	}
+	allowed, err := s.access.Permissions.Allowed(ctx, actor, org, authorization.KeyOrganizationManage)
+	if err != nil {
+		return nil, ErrDownloadUnavailable
+	}
+	if !allowed {
+		return nil, ErrDownloadDenied
+	}
+	items := []PublicDownload{}
+	for id, a := range s.artifacts {
+		if a.Public() || !s.now().Before(a.AvailableUntil) {
+			continue
+		}
+		if _, err := s.authorize(ctx, actor, org, id); err != nil {
+			if errors.Is(err, ErrDownloadDenied) {
+				continue
+			}
+			return nil, err
+		}
+		items = append(items, PublicDownload{a.ID, a.Version, a.Channel, a.Filename, a.SHA256, a.Bytes})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	return items, nil
+}
+
+func (s *Downloads) authorize(ctx context.Context, actor authorization.Principal, org, id string) (release.Artifact, error) {
+	if s == nil || ctx == nil || ctx.Err() != nil || actor.Validate() != nil || !tenant.ValidID(org) {
+		return release.Artifact{}, ErrDownloadDenied
+	}
+	scope := tenant.Scope{OrganizationID: org, ResourceID: org}
+	resolved, err := s.access.Tenants.Resolve(ctx, actor, scope)
+	if err != nil || resolved != scope {
+		return release.Artifact{}, ErrDownloadDenied
 	}
 	a, ok := s.artifacts[id]
 	if !ok || a.Public() {
-		return DownloadLink{}, ErrDownloadDenied
+		return release.Artifact{}, ErrDownloadDenied
 	}
 	keys := a.RequiredFeatures()
 	for _, key := range keys {
 		if err := entitlement.RequireEntitlement(ctx, s.access.Entitlements, org, key); err != nil {
-			return DownloadLink{}, ErrDownloadDenied
+			if !errors.Is(err, entitlement.ErrNotEntitled) {
+				return release.Artifact{}, ErrDownloadUnavailable
+			}
+			return release.Artifact{}, ErrDownloadDenied
 		}
 	}
 	allowed, err := s.access.Permissions.Allowed(ctx, actor, org, authorization.KeyOrganizationManage)
 	if err != nil || !allowed || (a.OrganizationID != "" && a.OrganizationID != org) {
-		return DownloadLink{}, ErrDownloadDenied
+		return release.Artifact{}, ErrDownloadDenied
 	}
 	if err := s.access.Quotas.Check(ctx, Execution{Actor: actor, Scope: scope, Requirement: Requirement{Feature: keys[0], Permission: authorization.KeyOrganizationManage}}); err != nil {
-		return DownloadLink{}, ErrDownloadDenied
+		return release.Artifact{}, ErrDownloadDenied
 	}
-	return s.sign(ctx, a)
+	return a, nil
 }
 func (s *Downloads) sign(ctx context.Context, a release.Artifact) (DownloadLink, error) {
 	now := s.now()

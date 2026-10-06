@@ -218,6 +218,18 @@ func (s *OnboardingService) StartBilling(ctx context.Context, actor authorizatio
 		return "", flow.ErrNotReady
 	}
 	switch mode {
+	case "portal":
+		portal, ok := s.billing.(interface {
+			Portal(context.Context, authorization.Principal, billing.PortalRequest) (billing.Session, error)
+		})
+		if !ok {
+			return "", flow.ErrUnavailable
+		}
+		session, err := portal.Portal(ctx, actor, billing.PortalRequest{OrganizationID: org, IdempotencyKey: fmt.Sprintf("portal_%s_%d", org, revision)})
+		if err != nil {
+			return "", err
+		}
+		return session.URL, nil
 	case "trial":
 		_, err = s.trials.Start(ctx, actor, org, v.Edition)
 		return "", err

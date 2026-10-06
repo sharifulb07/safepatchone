@@ -4,6 +4,7 @@ package application
 var BuildVersion = "dev"
 var BuildCommit = "unknown"
 var BuildTime = "unknown"
+var BuildChannel = "stable"
 
 type buildInfo struct {
 	Version string `json:"version"`

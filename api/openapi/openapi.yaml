@@ -32,13 +32,36 @@ paths:
         '404': {description: Unknown, expired or protected artifact}
         '429': {description: URL issuance capacity exhausted}
         '503': {description: Signing unavailable}
+  /v1/organizations/{organization}/downloads:
+    get:
+      operationId: listOrganizationDownloads
+      summary: List currently authorized private release metadata without signing
+      description: Browser sessions are accepted through the same-origin session boundary. Entitlements and organization management permission are rechecked; this list grants no download access.
+      security: [{agentBearer: []}, {sessionCookie: []}]
+      parameters:
+        - {name: organization, in: path, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9_-]+$'}}
+      responses:
+        '200':
+          description: No-store catalog of eligible private releases
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, maxItems: 4096, items: {$ref: '#/components/schemas/PublicDownload'}}
+        '401': {description: Authentication required}
+        '403': {description: Organization or permission denied}
+        '429': {description: Too many concurrent requests}
+        '503': {description: Authoritative access source unavailable}
   /v1/organizations/{organization}/downloads/{artifact}:
     post:
       operationId: protectedDownloadLink
       summary: Authorize a protected release artifact and issue a short-lived signed URL
       description: >-
-        Uses the existing opaque session bearer; cookies and provider tokens are
-        not accepted. Resolves current organization membership, then all required
+        Uses the existing opaque session bearer or a browser session with an exact
+        trusted Origin and session-bound CSRF header. Provider tokens are not
+        accepted. Resolves current organization membership, then all required
         capabilities, organization.manage and optional artifact organization binding.
         Self-host bundles require enterprise.self_hosted. Air-gap bundles additionally
         require enterprise.airgap. Every lts artifact additionally requires enterprise.lts.
@@ -47,6 +70,8 @@ paths:
         Responses are private/no-store; issued bearer URLs remain usable until expiry.
       security:
         - agentBearer: []
+        - sessionCookie: []
+          csrfHeader: []
       parameters:
         - {in: path, name: organization, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
         - {in: path, name: artifact, required: true, schema: {type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'}}
@@ -303,7 +328,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/OrganizationID'}]
     post:
       operationId: startOnboardingBilling
-      description: Requires billing.manage and mode. Uses trusted server offer configuration and the existing trial or checkout service. Clients must reload onboarding access; a redirect URL does not establish access.
+      description: Requires billing.manage and mode (trial, checkout, portal). Uses trusted server configuration. Paddle portal redirects omit automatic sign-in tokens and require Paddle email verification. Clients must reload onboarding access; a redirect URL does not establish access.
       security: [{sessionCookie: [], csrfHeader: []}]
       parameters: [{$ref: '#/components/parameters/TrustedOrigin'}]
       requestBody: {$ref: '#/components/requestBodies/OnboardingMutation'}
@@ -436,6 +461,28 @@ paths:
           description: Body exceeds the ingress limit or cannot be read
         '503':
           description: Synchronization failed; retry delivery. A pending receipt may already exist.
+  /v1/billing/paddle/webhook:
+    post:
+      operationId: synchronizePaddleSubscription
+      summary: Verify a Paddle Billing delivery and synchronize current organization access
+      description: Raw-body HMAC with five-second clock tolerance. Server-created transaction ownership is checked before binding a customer. Current subscription and settled billing period are fetched; browser completion grants no rights. Duplicate receipts are durable and current state is fetched under an organization lock.
+      parameters:
+        - in: header
+          name: Paddle-Signature
+          required: true
+          schema: {type: string, maxLength: 4096}
+      requestBody:
+        required: true
+        description: Original Paddle Billing event JSON, at most 262144 bytes.
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '204': {description: Applied, already applied, or intentionally ignored event}
+        '400': {description: Invalid signature or event}
+        '405': {description: POST required}
+        '413': {description: Body exceeds limit}
+        '503': {description: Synchronization unavailable; retry the delivery}
 components:
   securitySchemes:
     agentBearer:
@@ -475,7 +522,7 @@ components:
             properties:
               revision: {type: integer, minimum: 1}
               edition: {type: string, enum: [community, developer, team, business, enterprise]}
-              mode: {type: string, enum: [trial, checkout]}
+              mode: {type: string, enum: [trial, checkout, portal]}
               installation_id: {type: integer, minimum: 1}
               repository_ids:
                 type: array
@@ -1750,7 +1797,7 @@ components:
           properties:
             label:
               type: string
-              enum: [Download, Start Trial, Contact Sales]
+              enum: [Download, Start Trial, Choose plan, Contact Sales]
             href:
               type: string
               description: Validated HTTPS destination, fixed local onboarding path, or sales mailto address; empty when unavailable. Trial links select intent and do not activate a trial.

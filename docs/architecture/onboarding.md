@@ -24,7 +24,7 @@ source. No client action provisions a contract.
 
 ## Deployment
 
-Apply the one ordered migration history through `000011_onboarding.up.sql` once,
+Apply the one ordered migration history through `000022_paddle_checkout.up.sql` once,
 using the existing [migration procedure](../../migrations/README.md). There is no
 automatic migration runner. Provide PostgreSQL, NATS JetStream and an HTTPS
 reverse proxy. The API listens on loopback by default. Serve the Next.js site and
@@ -54,7 +54,11 @@ The flow uses [GitHub's user-token authorization](https://docs.github.com/en/ent
 with state and S256 PKCE. Repository lists use the authenticated user's accessible
 installations, rather than trusting a browser-supplied owner or clone URL.
 
-For checkout, also set `SAFEPATCH_STRIPE_API_KEY`,
+For Paddle checkout, follow the [Paddle setup guide](paddle-setup.md). It includes
+the required dashboard steps, account binding, sandbox test and live cutover.
+Set `SAFEPATCH_BILLING_PROVIDER=paddle`; do not configure both provider API keys.
+
+For the existing Stripe checkout, also set `SAFEPATCH_STRIPE_API_KEY`,
 `SAFEPATCH_STRIPE_WEBHOOK_SECRET`, `SAFEPATCH_STRIPE_CONNECTION_ID`,
 `SAFEPATCH_STRIPE_ACCOUNT_ID`, and `SAFEPATCH_STRIPE_PRICES`. The last is a JSON
 object mapping `developer`, `team`, and `business` to configured recurring price
@@ -73,10 +77,17 @@ go run ./cmd/safepatch-api serve
 For Next.js, set server-only `SAFEPATCH_API_ORIGIN=http://127.0.0.1:8080` when the
 API is on the same host, or use its trusted HTTPS origin. Start the site from
 `web` with `npm.cmd run build` then `npm.cmd start`. Access `/onboarding` through
-the public HTTPS proxy. The bounded Next.js proxy forwards only auth/onboarding
-paths and selected headers to this fixed origin; it never chooses a destination
+the public HTTPS proxy. The bounded Next.js proxy forwards auth/onboarding and
+explicit public/organization download routes with selected headers to this fixed origin; it never chooses a destination
 from user input. No `NEXT_PUBLIC_` secret is needed. Pricing trial links now
 default to `/onboarding?edition=...` when no external trial URL is configured.
+
+OAuth may preserve an edition selection or return to `/downloads`. The API
+accepts only those local destinations; return URLs never change access. The API
+provides `/healthz` and `/readyz` for internal probes. Readiness checks PostgreSQL,
+broker connectivity, and the last background maintenance result. Background
+failures log a fixed operation name without credentials. SIGTERM and Ctrl+C
+trigger bounded HTTP shutdown.
 
 ## First-proof worker boundary
 

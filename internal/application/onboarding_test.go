@@ -77,6 +77,27 @@ func (g *flowGitHub) Repositories(context.Context, authorization.Principal, int6
 
 type flowBilling struct{ calls int }
 
+func (b *flowBilling) Portal(context.Context, authorization.Principal, billing.PortalRequest) (billing.Session, error) {
+	b.calls++
+	return billing.Session{URL: "https://sandbox-customer-portal.paddle.com/test"}, nil
+}
+
+func TestOnboardingPortalDoesNotGrantAccess(t *testing.T) {
+	s, store, _, b, _, _ := newFlow(t)
+	actor := authorization.Principal{ID: "user", Kind: authorization.User}
+	v, err := s.SelectEdition(t.Context(), actor, "org_a", 1, edition.Team)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := s.StartBilling(t.Context(), actor, "org_a", v.Revision, "portal")
+	if err != nil || target == "" || b.calls != 1 || store.paid {
+		t.Fatal(target, err)
+	}
+	if _, err = s.StartBilling(t.Context(), actor, "org_a", v.Revision-1, "portal"); err == nil || b.calls != 1 {
+		t.Fatal("stale portal accepted", err)
+	}
+}
+
 func (b *flowBilling) Checkout(context.Context, authorization.Principal, billing.CheckoutRequest) (billing.Session, error) {
 	b.calls++
 	return billing.Session{URL: "https://checkout.stripe.com/test"}, nil

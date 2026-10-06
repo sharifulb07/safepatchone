@@ -1,5 +1,12 @@
 # SafePatch marketing site
 
+The current site includes `/` (landing), `/signin`, `/signup`, `/pricing`,
+`/downloads`, and `/onboarding`. Sign-in and signup use the existing GitHub App
+OAuth flow. Downloads list published platform archives and recheck organization
+entitlements and permissions for private bundles. See the
+[current release review](../docs/releases/2026-09-27-review.md) for validation
+evidence and unresolved production blockers.
+
 The site also serves `/onboarding`: GitHub signup/login, organization creation,
 edition selection, checkout/trial, GitHub installation, repository/policy selection
 and durable first-proof submission. Follow the [Go API and HTTPS setup](../docs/architecture/onboarding.md).
@@ -7,14 +14,14 @@ Developer/Team trial links default to the local onboarding route. The API owns
 all entitlement decisions. Browser tests use mocked onboarding responses; a
 configured worker is required for actual proof completion.
 
-The Next.js/TypeScript pricing page is available at `/pricing` (and `/`). It shows
+The Next.js/TypeScript pricing page is available at `/pricing`. It shows
 exactly Community, Developer, Team, Business and Enterprise, with feature search,
 an availability comparison, responsive cards, keyboard-accessible action dialogs,
 and expandable questions. The sections below describe the original pricing milestone.
 
 ## Run locally
 
-Use Go 1.26+, Node.js 20.9+, and npm. The app follows the official
+Use the Go security patch required by `go.mod`, Node.js 24, and npm. The app follows the official
 [Next.js App Router installation](https://nextjs.org/docs/app/getting-started/installation).
 Dependencies are pinned in `package-lock.json`.
 
@@ -67,9 +74,19 @@ it remains unavailable by default. Developer and Team use 14 days.
 
 Without a published destination, the requested action remains a button and opens
 an explanation. It never fabricates a download, signup success, sales submission,
-or trial activation. Paid amounts are not present in current product configuration;
-the page says “Pricing to come” and Enterprise says “Custom”. Publish real price
-presentation through the Go product configuration, not a frontend edition map.
+or trial activation. Paid amounts default to unpublished; Enterprise uses contract
+pricing. Set `SAFEPATCH_PUBLIC_PRICES` before the catalog build to a JSON object
+keyed by `developer`, `team`, or `business`. Each entry requires `amount` (positive
+decimal string), `currency` (uppercase three-letter code), and `interval` (`month`
+or `year`). Use approved per-organization amounts matching your billing offers.
+Display configuration never changes charges, entitlements, or permissions.
+Community links to `/downloads` by default. Business can continue to plan setup
+even when no trial is offered.
+
+`/checkout` hosts Paddle Billing checkout. Follow the [Paddle setup guide](../docs/architecture/paddle-setup.md)
+for the publishable client token, Go API secrets, approved domain, prices, webhook
+destination and live acceptance. The payment script and iframe/network CSP
+permissions are scoped to this page. Browser completion never grants access.
 
 Catalog visibility grants no access. Organization runtime entitlements, independent
 actor permissions, quota policies and verification readiness continue to be enforced
@@ -97,10 +114,12 @@ parity, unsafe URL rejection, and immutable configuration. Existing premium
 admission tests continue to prove entitlement and permission boundaries. No schema
 change is needed; native PostgreSQL tests retain their existing opt-in requirement.
 
-The site renders text through React escaping and has no raw HTML renderer, remote
-catalog fetch, public mutation, or tenant data. Security headers restrict embedding
-and browser permissions. Next.js hydration currently requires inline scripts under
-the static page CSP; a nonce-based policy would require a different rendering setup.
+The site renders text through React escaping. Product presentation is generated
+from Go; private account and download state comes from authenticated API routes.
+Pages render dynamically with a fresh script nonce and a CSP that does not allow
+arbitrary inline scripts. CSS retains inline-style support. The production edge
+template in `deploy/web.nginx.conf` provides HTTPS, ingress limits, no caching,
+and access logging without OAuth query strings.
 
 ## Milestone file inventory
 

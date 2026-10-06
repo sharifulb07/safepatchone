@@ -9,6 +9,7 @@ export default defineConfig({
     launchOptions: existsSync(edge) ? { executablePath: edge } : {},
   },
   webServer: {
+    env: { SAFEPATCH_PADDLE_ENVIRONMENT: "sandbox", SAFEPATCH_PADDLE_CLIENT_TOKEN: "test_fixtureOnlyNotARealToken" },
     command: "node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3100",
     url: "http://127.0.0.1:3100/pricing", reuseExistingServer: false, timeout: 60000,
   },

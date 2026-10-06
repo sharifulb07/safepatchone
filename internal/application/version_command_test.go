@@ -36,6 +36,22 @@ func setTestBuildVersion(t *testing.T, value string) {
 	t.Cleanup(func() { BuildVersion = previous })
 }
 
+func TestLocalVersionUsesBuildChannelWithoutChangingEdition(t *testing.T) {
+	previous := BuildChannel
+	t.Cleanup(func() { BuildChannel = previous })
+	for _, channel := range release.Channels() {
+		BuildChannel = string(channel)
+		m, err := (localVersionMetadata{}).VersionMetadata(t.Context())
+		if err != nil || m.ReleaseChannel != channel || m.Edition != edition.Community {
+			t.Fatal(m, err)
+		}
+	}
+	BuildChannel = "enterprise"
+	if _, err := (localVersionMetadata{}).VersionMetadata(t.Context()); err == nil {
+		t.Fatal("edition accepted as a release channel")
+	}
+}
+
 func TestVersionRequestedFormatAndAliases(t *testing.T) {
 	setTestBuildVersion(t, "1.0.0")
 	want := "SafePatch:\n1.0.0\n\nProtocol:\n1\n\nEdition:\nTeam\n\nEdition configuration:\nteam-2026-v1\n\nRelease channel:\nstable\n\nEntitlement source:\nsubscription\n"

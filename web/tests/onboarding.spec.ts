@@ -51,7 +51,7 @@ test("onboarding follows server state through all steps without trusting checkou
 test("signed-out onboarding offers signup/login and does not create local privileges", async ({ page }) => {
   await page.route("**/v1/onboarding/session", route => route.fulfill({ status: 401, json: { error: "AUTHENTICATION_REQUIRED" } }));
   await page.goto("/onboarding?success=true&edition=enterprise");
-  await expect(page.getByRole("link", { name: "Sign up with GitHub" })).toHaveAttribute("href", "/v1/auth/github/start");
+  await expect(page.getByRole("link", { name: "Sign up with GitHub" })).toHaveAttribute("href", "/v1/auth/github/start?return_to=%2Fonboarding%3Fedition%3Denterprise");
   await expect(page.getByRole("link", { name: "Log in with GitHub" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Run first proof" })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	distribution "safepatch/internal/domain/release"
 	"strings"
 	"time"
@@ -92,12 +93,18 @@ func build(ctx context.Context, m metadata, out string) error {
 		}
 		err = func() error {
 			defer os.RemoveAll(dir) // Only this freshly created private staging directory.
-			ldflags := "-s -w -X safepatch/internal/application.BuildVersion=" + m.Version + " -X safepatch/internal/application.BuildCommit=" + m.Commit + " -X safepatch/internal/application.BuildTime=" + m.BuiltAt
+			ldflags := "-s -w -X safepatch/internal/application.BuildVersion=" + m.Version + " -X safepatch/internal/application.BuildCommit=" + m.Commit + " -X safepatch/internal/application.BuildTime=" + m.BuiltAt + " -X safepatch/internal/application.BuildChannel=" + m.Channel
 			args := []string{"build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags", ldflags, "-o", dir + string(os.PathSeparator)}
 			for _, name := range commands {
 				args = append(args, "./cmd/"+name)
 			}
-			cmd := exec.CommandContext(ctx, "go", args...)
+			// Reuse the toolchain selected by go.mod, including Go's automatic
+			// security update, instead of an older ambient PATH installation.
+			goBinary := "go"
+			if runtime.GOOS == "windows" {
+				goBinary += ".exe"
+			}
+			cmd := exec.CommandContext(ctx, filepath.Join(runtime.GOROOT(), "bin", goBinary), args...)
 			cmd.Env = buildEnv(os.Environ(), parts[0], parts[1])
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

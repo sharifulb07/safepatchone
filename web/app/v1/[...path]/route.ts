@@ -5,9 +5,14 @@ export const dynamic = "force-dynamic";
 // entitlements, OAuth verification and all mutations stay in Go.
 async function proxy(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
-  if (!path.length || !["onboarding", "auth"].includes(path[0]) || path.some(p => !/^[a-zA-Z0-9_-]+$/.test(p))) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+  const downloads = path[0] === "downloads" && path[1] === "public" && (path.length === 2 || path.length === 3) && request.method === "GET";
+  const organizationDownloads = path[0] === "organizations" && path[2] === "downloads" && ((path.length === 3 && request.method === "GET") || (path.length === 4 && request.method === "POST"));
+  if (!path.length || (!["onboarding", "auth"].includes(path[0]) && !downloads && !organizationDownloads) || path.some(p => !/^[a-zA-Z0-9_-]+$/.test(p))) return Response.json({ error: "NOT_FOUND" }, { status: 404, headers: { "Cache-Control": "no-store" } });
+  // Browser routes accept only HttpOnly sessions. Do not silently discard a
+  // second credential and let the API act as a different principal.
+  if (request.headers.has("authorization")) return Response.json({ error: "AUTHENTICATION_REJECTED" }, { status: 400, headers: { "Cache-Control": "no-store" } });
   const origin = process.env.SAFEPATCH_API_ORIGIN;
-  if (!origin) return Response.json({ error: "ONBOARDING_UNAVAILABLE" }, { status: 503 });
+  if (!origin) return Response.json({ error: "ONBOARDING_UNAVAILABLE" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   try {
     const base = new URL(origin);
     if (base.username || base.password || base.pathname !== "/" || base.search || base.hash || (base.protocol !== "https:" && !(base.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(base.hostname)))) throw new Error("invalid upstream");

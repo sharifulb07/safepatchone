@@ -14,7 +14,11 @@ type BillingWebhookProcessor interface {
 }
 
 func NewBillingWebhookHandler(processor BillingWebhookProcessor) (http.Handler, error) {
-	if processor == nil {
+	return NewBillingWebhookHandlerWithSignature(processor, "Stripe-Signature")
+}
+
+func NewBillingWebhookHandlerWithSignature(processor BillingWebhookProcessor, signatureHeader string) (http.Handler, error) {
+	if processor == nil || (signatureHeader != "Stripe-Signature" && signatureHeader != "Paddle-Signature") {
 		return nil, billing.ErrInvalidConfiguration
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +28,7 @@ func NewBillingWebhookHandler(processor BillingWebhookProcessor) (http.Handler, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if len(r.Header.Values("Stripe-Signature")) != 1 {
+		if len(r.Header.Values(signatureHeader)) != 1 {
 			http.Error(w, "invalid webhook", 400)
 			return
 		}
@@ -37,7 +41,7 @@ func NewBillingWebhookHandler(processor BillingWebhookProcessor) (http.Handler, 
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
 		defer cancel()
-		err = processor.Handle(ctx, billing.WebhookDelivery{Payload: raw, Signature: r.Header.Get("Stripe-Signature")})
+		err = processor.Handle(ctx, billing.WebhookDelivery{Payload: raw, Signature: r.Header.Get(signatureHeader)})
 		switch {
 		case err == nil, errors.Is(err, billing.ErrUnsupportedEvent):
 			w.WriteHeader(http.StatusNoContent)

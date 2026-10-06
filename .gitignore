@@ -2,6 +2,10 @@
 /coverage.out
 /coverage.html
 /dist/
+/.env
+/.env.local
+/.env.production
+/deploy/paddle.env
 
 *./
 next

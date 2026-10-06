@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/mail"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -51,7 +52,19 @@ type PricingOptions struct {
 	TrialURL          string
 	SalesURL          string
 	BusinessTrialDays int
+	Prices            map[edition.Key]PublishedPrice
 }
+
+// PublishedPrice is operator supplied display data. The billing provider's
+// trusted price ID determines the actual charge; this never changes grants.
+type PublishedPrice struct {
+	Amount   string `json:"amount"`
+	Currency string `json:"currency"`
+	Interval string `json:"interval"`
+}
+
+var priceAmount = regexp.MustCompile(`^(0\.[0-9]*[1-9][0-9]*|[1-9][0-9]{0,7}(\.[0-9]{1,2})?)$`)
+var priceCurrency = regexp.MustCompile(`^[A-Z]{3}$`)
 
 var ErrInvalidPricing = errors.New("invalid pricing configuration")
 
@@ -79,8 +92,16 @@ func PublicPricing(options PricingOptions) (Pricing, error) {
 	if !validDestination(options.DownloadURL, false) || !validDestination(options.TrialURL, false) || !validDestination(options.SalesURL, true) {
 		return Pricing{}, ErrInvalidPricing
 	}
+	for key, price := range options.Prices {
+		if (key != edition.Developer && key != edition.Team && key != edition.Business) || len(price.Amount) > 11 || !priceAmount.MatchString(price.Amount) || !priceCurrency.MatchString(price.Currency) || (price.Interval != "month" && price.Interval != "year") {
+			return Pricing{}, ErrInvalidPricing
+		}
+	}
 	if options.TrialURL == "" {
 		options.TrialURL = "/onboarding"
+	}
+	if options.DownloadURL == "" {
+		options.DownloadURL = "/downloads"
 	}
 	features, err := feature.NewBuiltinCatalog("0.2.0", time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC))
 	if err != nil {
@@ -119,6 +140,10 @@ func PublicPricing(options PricingOptions) (Pricing, error) {
 			return Pricing{}, ErrInvalidPricing
 		}
 		c := presentation[ed.Key]
+		if price, ok := options.Prices[ed.Key]; ok {
+			c.price = price.Currency + " " + price.Amount
+			c.note = "Per organization / " + price.Interval
+		}
 		v := PricingEdition{Key: ed.Key, Name: ed.Name, Description: c.description, EditionVersionID: versions[ed.Key], PriceLabel: c.price, PriceNote: c.note, Action: PricingAction{Label: c.label, Href: c.destination, UnavailableMessage: c.unavailable}, Features: []PricingFeature{}}
 		if offer, e := policy.Offer(ed.Key); e == nil {
 			days := offer.Days
@@ -132,8 +157,13 @@ func PublicPricing(options PricingOptions) (Pricing, error) {
 				v.Action.Href = u.String()
 			}
 		} else if c.label == "Start Trial" {
-			v.Action.Href = ""
-			v.TrialNote = "Trial duration confirmed before signup"
+			v.Action.Label = "Choose plan"
+			u, _ := url.Parse(options.TrialURL)
+			q := u.Query()
+			q.Set("edition", string(ed.Key))
+			u.RawQuery = q.Encode()
+			v.Action.Href = u.String()
+			v.TrialNote = "No trial currently offered"
 		}
 		for _, mapping := range entry.Bundle.Features {
 			if !mapping.Enabled {

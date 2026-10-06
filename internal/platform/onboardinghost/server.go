@@ -11,11 +11,14 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/nats-io/nats.go"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"safepatch/internal/application"
 	"safepatch/internal/authorization"
+	"safepatch/internal/billing/paddle"
 	"safepatch/internal/billing/stripe"
 	"safepatch/internal/config"
 	"safepatch/internal/domain/edition"
@@ -33,11 +36,13 @@ import (
 	"safepatch/internal/platform/trialstore"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 )
 
 func Run(stderr io.Writer) int {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if err := serve(ctx); err != nil {
 		fmt.Fprintln(stderr, "onboarding API unavailable: check trusted server configuration and infrastructure")
@@ -142,8 +147,14 @@ func serve(ctx context.Context) error {
 	}
 	var checkout application.OnboardingBilling
 	var webhook http.Handler
+	webhookPath := "/v1/billing/stripe/webhook"
 	offerIDs := map[edition.Key]string{}
-	if apiKey := os.Getenv("SAFEPATCH_STRIPE_API_KEY"); apiKey != "" {
+	provider, err := billingProvider(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if provider == "stripe" {
+		apiKey := os.Getenv("SAFEPATCH_STRIPE_API_KEY")
 		prices := map[edition.Key]string{}
 		if json.Unmarshal([]byte(os.Getenv("SAFEPATCH_STRIPE_PRICES")), &prices) != nil {
 			return flow.ErrInvalid
@@ -167,6 +178,34 @@ func serve(ctx context.Context) error {
 		// the account once before starting; startup does not silently change it.
 		checkout = &billingstore.OnboardingCheckout{Subscriptions: subscriptions, Permissions: permissions}
 		webhook = subscriptions.Webhook
+	}
+	if provider == "paddle" {
+		var prices map[edition.Key]string
+		if json.Unmarshal([]byte(os.Getenv("SAFEPATCH_PADDLE_PRICES")), &prices) != nil || len(prices) != 3 {
+			return flow.ErrInvalid
+		}
+		var offers []paddle.Offer
+		for _, e := range []edition.Key{edition.Developer, edition.Team, edition.Business} {
+			if prices[e] == "" {
+				return flow.ErrInvalid
+			}
+			id := "onboarding_" + string(e)
+			offerIDs[e] = id
+			offers = append(offers, paddle.Offer{OfferID: id, EditionVersionID: versions[e], PriceID: prices[e]})
+		}
+		environment := os.Getenv("SAFEPATCH_PADDLE_ENVIRONMENT")
+		connection := billingstore.Connection{ID: os.Getenv("SAFEPATCH_PADDLE_CONNECTION_ID"), Provider: paddle.Provider, AccountReference: os.Getenv("SAFEPATCH_PADDLE_ACCOUNT_ID"), LiveMode: environment == "production"}
+		subscriptions, err := billingstore.NewPaddleSubscriptions(db, connection, paddle.Config{APIKey: os.Getenv("SAFEPATCH_PADDLE_API_KEY"), WebhookSecrets: []string{os.Getenv("SAFEPATCH_PADDLE_WEBHOOK_SECRET")}, Environment: environment, Offers: offers, Catalog: catalog, CheckoutURL: origin + "/checkout"}, features, time.Now)
+		if err != nil {
+			return err
+		}
+		// Fail startup when the immutable account/environment binding was not provisioned.
+		var bound bool
+		if err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_connections WHERE connection_id=$1 AND provider='paddle' AND account_reference=$2 AND live_mode=$3)`, connection.ID, connection.AccountReference, connection.LiveMode).Scan(&bound); err != nil || !bound {
+			return flow.ErrInvalid
+		}
+		checkout, webhook = subscriptions, subscriptions.Webhook
+		webhookPath = "/v1/billing/paddle/webhook"
 	}
 	offers := []application.OnboardingOffer{}
 	for _, e := range edition.Editions() {
@@ -197,7 +236,14 @@ func serve(ctx context.Context) error {
 		if e != nil {
 			return e
 		}
-		h.Register(mux)
+		downloadMux := http.NewServeMux()
+		h.Register(downloadMux)
+		browserDownloads, e := onboardinghttp.BrowserDownloads(downloadMux, sessions, origin)
+		if e != nil {
+			return e
+		}
+		mux.Handle("/v1/downloads/", downloadMux)
+		mux.Handle("/v1/organizations/", browserDownloads)
 	}
 	if path := os.Getenv("SAFEPATCH_AGENT_CONFIG"); path != "" {
 		file, e := os.Open(path)
@@ -237,38 +283,104 @@ func serve(ctx context.Context) error {
 		flushPR = func(c context.Context) error { return prStore.Flush(c, nc, prStream) }
 	}
 	if webhook != nil {
-		mux.Handle("/v1/billing/stripe/webhook", webhook)
+		mux.Handle(webhookPath, webhook)
 	}
 	addr := os.Getenv("SAFEPATCH_API_ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
 	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 16384}
+	var backgroundFailed atomic.Bool
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		check, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if ctx.Err() != nil || backgroundFailed.Load() || !nc.IsConnected() || db.PingContext(check) != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("ready\n"))
+	})
+	// Registered after DB/broker cleanup so maintenance stops before either
+	// dependency closes, including when listener startup fails.
+	stopMaintenance := startMaintenance(ctx, 5*time.Second, func(work context.Context) {
+		failed := false
+		if err := proofs.Flush(work); err != nil {
+			failed = true
+			slog.Error("proof outbox flush failed")
+		}
+		if flushPR != nil {
+			if err := flushPR(work); err != nil {
+				failed = true
+				slog.Error("pull request outbox flush failed")
+			}
+		}
+		if err := sessions.Cleanup(work); err != nil {
+			failed = true
+			slog.Error("session cleanup failed")
+		}
+		backgroundFailed.Store(failed)
+	})
+	defer stopMaintenance()
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		return err
+	}
+	return serveHTTP(ctx, server, listener)
+}
+
+// The returned stop function cancels outstanding maintenance and waits for it
+// to release its resources. Work must honor its bounded context.
+func startMaintenance(parent context.Context, interval time.Duration, work func(context.Context)) func() {
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		defer close(done)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				work, cancel := context.WithTimeout(ctx, 15*time.Second)
-				_ = proofs.Flush(work)
-				if flushPR != nil {
-					_ = flushPR(work)
+				if ctx.Err() != nil {
+					return
 				}
-				_ = sessions.Cleanup(work)
-				cancel()
+				bounded, stop := context.WithTimeout(ctx, 15*time.Second)
+				work(bounded)
+				stop()
 			}
 		}
 	}()
+	return func() { cancel(); <-done }
+}
+
+func serveHTTP(ctx context.Context, server *http.Server, listener net.Listener) error {
+	stopped := make(chan struct{})
+	shutdownDone := make(chan struct{})
 	go func() {
-		<-ctx.Done()
+		defer close(shutdownDone)
+		select {
+		case <-ctx.Done():
+		case <-stopped:
+			return
+		}
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdown)
+		if err := server.Shutdown(shutdown); err != nil {
+			_ = server.Close()
+		}
 	}()
-	err = server.ListenAndServe()
+	err := server.Serve(listener)
+	close(stopped)
+	// Shutdown closes the listener before requests have drained. Keep DB and
+	// broker resources alive until it actually finishes, including on SIGTERM.
+	<-shutdownDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}

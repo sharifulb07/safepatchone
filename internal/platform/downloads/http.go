@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"safepatch/internal/application"
+	"safepatch/internal/authorization"
 	"safepatch/internal/tenant"
 )
 
@@ -27,7 +28,55 @@ func NewHandler(service *application.Downloads, auth application.Authenticator) 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/downloads/public", h.catalog)
 	mux.HandleFunc("GET /v1/downloads/public/{artifact}", h.public)
+	mux.HandleFunc("GET /v1/organizations/{organization}/downloads", h.organizationCatalog)
 	mux.HandleFunc("POST /v1/organizations/{organization}/downloads/{artifact}", h.protected)
+}
+
+func (h *Handler) authenticate(r *http.Request) (authorization.Principal, error) {
+	values := r.Header.Values("Authorization")
+	if len(values) != 1 || !strings.HasPrefix(values[0], "Bearer ") || len(values[0]) > 4096 {
+		return authorization.Principal{}, application.ErrDownloadDenied
+	}
+	credential := strings.TrimPrefix(values[0], "Bearer ")
+	if credential == "" || strings.ContainsAny(credential, " \t\r\n,") {
+		return authorization.Principal{}, application.ErrDownloadDenied
+	}
+	return h.auth.Authenticate(r.Context(), credential)
+}
+
+func (h *Handler) organizationCatalog(w http.ResponseWriter, r *http.Request) {
+	headers(w)
+	if r.URL.RawQuery != "" {
+		failure(w, 400)
+		return
+	}
+	select {
+	case h.slots <- struct{}{}:
+		defer func() { <-h.slots }()
+	default:
+		failure(w, 429)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	actor, err := h.authenticate(r)
+	if err != nil || actor.Validate() != nil {
+		failure(w, 401)
+		return
+	}
+	items, err := h.service.OrganizationCatalog(ctx, actor, r.PathValue("organization"))
+	if err != nil {
+		if errors.Is(err, application.ErrDownloadUnavailable) {
+			failure(w, 503)
+		} else {
+			failure(w, 403)
+		}
+		return
+	}
+	_ = json.NewEncoder(w).Encode(struct {
+		Items []application.PublicDownload `json:"items"`
+	}{items})
 }
 func headers(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "private, no-store")

@@ -9,6 +9,28 @@ import (
 	"time"
 )
 
+func TestPublishedPricesAreConfigurationOnlyAndValidated(t *testing.T) {
+	price := PublishedPrice{Amount: "29.00", Currency: "USD", Interval: "month"}
+	p, err := PublicPricing(PricingOptions{Prices: map[edition.Key]PublishedPrice{edition.Developer: price}})
+	if err != nil || p.Editions[1].PriceLabel != "USD 29.00" || p.Editions[1].PriceNote != "Per organization / month" {
+		t.Fatal(p, err)
+	}
+	baseline, _ := PublicPricing(PricingOptions{})
+	want, _ := json.Marshal(baseline.Editions[1].Features)
+	got, _ := json.Marshal(p.Editions[1].Features)
+	if string(want) != string(got) {
+		t.Fatal("price changed capabilities")
+	}
+	for _, bad := range []PublishedPrice{{"0", "USD", "month"}, {"-1", "USD", "month"}, {"1", "usd", "month"}, {"1", "USD", "forever"}, {"1<script>", "USD", "month"}} {
+		if _, err := PublicPricing(PricingOptions{Prices: map[edition.Key]PublishedPrice{edition.Developer: bad}}); err == nil {
+			t.Fatal("invalid price accepted", bad)
+		}
+	}
+	if _, err := PublicPricing(PricingOptions{Prices: map[edition.Key]PublishedPrice{edition.Community: price}}); err == nil {
+		t.Fatal("Community price overridden")
+	}
+}
+
 func TestPricingUsesCanonicalEditionsFeaturesAndTrialPolicy(t *testing.T) {
 	p, err := PublicPricing(PricingOptions{})
 	if err != nil {
@@ -19,7 +41,7 @@ func TestPricingUsesCanonicalEditionsFeaturesAndTrialPolicy(t *testing.T) {
 	if len(p.Editions) != 5 || p.Release != matrix.Release {
 		t.Fatal("wrong catalog")
 	}
-	labels := []string{"Download", "Start Trial", "Start Trial", "Start Trial", "Contact Sales"}
+	labels := []string{"Download", "Start Trial", "Start Trial", "Choose plan", "Contact Sales"}
 	for i, e := range edition.Editions() {
 		v := p.Editions[i]
 		b := matrix.Editions[i].Bundle
@@ -85,8 +107,12 @@ func TestPricingDestinationsAndBusinessConfiguration(t *testing.T) {
 	}
 	opts.BusinessTrialDays = 0
 	p, err = PublicPricing(opts)
-	if err != nil || p.Editions[3].TrialDays != nil || p.Editions[3].Action.Href != "" {
-		t.Fatal("disabled business offer still routed", err)
+	if err != nil || p.Editions[3].TrialDays != nil || p.Editions[3].Action.Label != "Choose plan" {
+		t.Fatal("disabled trial still offered", err)
+	}
+	u, _ := url.Parse(p.Editions[3].Action.Href)
+	if u.Query().Get("edition") != "business" {
+		t.Fatal("paid Business onboarding unreachable")
 	}
 }
 func TestPricingRejectsUnsafeDestinationsAndInvalidPolicies(t *testing.T) {
